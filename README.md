@@ -1,16 +1,44 @@
-# parentlock
+# ParentLock 🛡️
 
-A new Flutter project.
+A Flutter application for parental control and child usage monitoring.
 
-## Getting Started
+## 🚀 Getting Started for Collaborators
 
-This project is a starting point for a Flutter application.
+To run this project on your machine, follow these steps:
 
-A few resources to get you started if this is your first Flutter project:
+### 1. Prerequisites
+- Install [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- Setup an editor (VS Code or Android Studio)
+- Ensure you have a physical device or emulator/simulator ready.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### 2. Clone the Repository
+```bash
+git clone https://github.com/112kratoss/parentlock.git
+cd parentlock
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 3. Setup Configuration (CRITICAL)
+For security, Firebase configuration files are **not** included in the repository. You must obtain these from the project owner and place them in the correct directories:
+
+- **Android**: Place `google-services.json` in `android/app/`
+- **iOS**: Place `GoogleService-Info.plist` in `ios/Runner/`
+
+> [!IMPORTANT]
+> The app will not build or run without these files.
+
+### 4. Install Dependencies
+Run the following command in the project root:
+```bash
+flutter pub get
+```
+
+### 5. Run the App
+```bash
+flutter run
+```
+
+## Project Structure
+- `lib/screens/`: UI screens for Parent and Child roles.
+- `lib/services/`: Backend logic for Firebase, Supabase, and Native APIs.
+- `lib/models/`: Data structures.
+- `lib/app_router.dart`: Navigation configuration.
