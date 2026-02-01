@@ -92,14 +92,39 @@ class NativeService {
   /// Android: PACKAGE_USAGE_STATS, SYSTEM_ALERT_WINDOW
   /// iOS: Screen Time authorization
   Future<bool> checkPermissions() async {
+    final status = await getPermissionStatus();
+    return status['usageStats'] == true && status['overlay'] == true;
+  }
+
+  /// Get detailed permission status
+  Future<Map<String, bool>> getPermissionStatus() async {
     try {
       final result = await _channel.invokeMethod('checkPermissions');
       if (result is Map) {
-        final usageStats = result['usageStats'] as bool? ?? false;
-        final overlay = result['overlay'] as bool? ?? false;
-        return usageStats && overlay;
+        return Map<String, bool>.from(result.map((key, value) => MapEntry(key.toString(), value as bool)));
       }
-      return result as bool;
+      return {
+        'usageStats': result as bool? ?? false,
+        'overlay': result as bool? ?? false,
+        'batteryOptimization': false,
+      };
+    } on PlatformException {
+      return {
+        'usageStats': false,
+        'overlay': false,
+        'batteryOptimization': false,
+      };
+    }
+  }
+
+  /// Check if battery optimization is ignored
+  Future<bool> checkBatteryOptimization() async {
+    try {
+      final result = await _channel.invokeMethod('checkPermissions');
+      if (result is Map) {
+        return result['batteryOptimization'] as bool? ?? false;
+      }
+      return false;
     } on PlatformException {
       return false;
     }
@@ -113,6 +138,33 @@ class NativeService {
       await _channel.invokeMethod('requestPermissions');
     } on PlatformException catch (e) {
       throw Exception('Failed to request permissions: ${e.message}');
+    }
+  }
+
+  /// Request usage stats permission specifically
+  Future<void> requestUsageStatsPermission() async {
+    try {
+      await _channel.invokeMethod('requestUsageStatsPermission');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to request usage stats permission: ${e.message}');
+    }
+  }
+
+  /// Request overlay permission specifically
+  Future<void> requestOverlayPermission() async {
+    try {
+      await _channel.invokeMethod('requestOverlayPermission');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to request overlay permission: ${e.message}');
+    }
+  }
+
+  /// Request to ignore battery optimizations
+  Future<void> requestIgnoreBatteryOptimizations() async {
+    try {
+      await _channel.invokeMethod('requestIgnoreBatteryOptimizations');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to request battery optimization exemption: ${e.message}');
     }
   }
 

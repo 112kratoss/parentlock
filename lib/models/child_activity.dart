@@ -13,6 +13,8 @@ class ChildActivity {
   final int minutesUsed;
   final bool isBlocked;
   final DateTime lastUpdated;
+  final String category; // 'social', 'game', etc. (System detected)
+  final String? manualCategory; // User override
 
   ChildActivity({
     required this.id,
@@ -23,6 +25,8 @@ class ChildActivity {
     required this.minutesUsed,
     required this.isBlocked,
     required this.lastUpdated,
+    this.category = 'other',
+    this.manualCategory,
   });
 
   /// Create from Supabase JSON response
@@ -36,6 +40,8 @@ class ChildActivity {
       minutesUsed: json['minutes_used'] as int,
       isBlocked: json['is_blocked'] as bool,
       lastUpdated: DateTime.parse(json['last_updated'] as String),
+      category: json['category'] as String? ?? 'other',
+      manualCategory: json['manual_category'] as String?,
     );
   }
 
@@ -50,6 +56,8 @@ class ChildActivity {
       'minutes_used': minutesUsed,
       'is_blocked': isBlocked,
       'last_updated': lastUpdated.toIso8601String(),
+      'category': category,
+      'manual_category': manualCategory,
     };
   }
 
@@ -63,6 +71,8 @@ class ChildActivity {
     int? minutesUsed,
     bool? isBlocked,
     DateTime? lastUpdated,
+    String? category,
+    String? manualCategory,
   }) {
     return ChildActivity(
       id: id ?? this.id,
@@ -73,14 +83,22 @@ class ChildActivity {
       minutesUsed: minutesUsed ?? this.minutesUsed,
       isBlocked: isBlocked ?? this.isBlocked,
       lastUpdated: lastUpdated ?? this.lastUpdated,
+      category: category ?? this.category,
+      manualCategory: manualCategory ?? this.manualCategory,
     );
   }
+
+  /// Get effective category (Manual > System > Other)
+  String get effectiveCategory => manualCategory?.isNotEmpty == true ? manualCategory! : category;
 
   /// Remaining minutes before limit
   int get remainingMinutes => dailyLimitMinutes - minutesUsed;
   
   /// Whether the limit has been exceeded
   bool get isLimitExceeded => minutesUsed >= dailyLimitMinutes;
+
+  /// Whether the app is effectively blocked (manual or limit exceeded)
+  bool get isEffectivelyBlocked => isBlocked || isLimitExceeded;
   
   /// Usage percentage (0.0 to 1.0+)
   double get usagePercentage => dailyLimitMinutes > 0 

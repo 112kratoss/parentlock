@@ -1,4 +1,4 @@
-package com.parentlock.parentlock
+package com.example.parentlock_native
 
 import android.app.*
 import android.content.Context
@@ -51,7 +51,15 @@ class MonitoringService : Service() {
         
         // Start foreground
         val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+
+            startForeground(
+                NOTIFICATION_ID, 
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         
         // Start monitoring loop
         startMonitoring()
@@ -71,8 +79,10 @@ class MonitoringService : Service() {
         override fun run() {
             val currentApp = UsageStatsService.getCurrentForegroundApp(this@MonitoringService)
             
-            if (currentApp != null && blockedApps.contains(currentApp)) {
+            // Use BlockOverlayService's blocked apps set (updated dynamically from Flutter)
+            if (currentApp != null && BlockOverlayService.isBlocked(currentApp)) {
                 // Blocked app detected, show overlay
+                android.util.Log.d("MonitoringService", "Blocked app detected: $currentApp")
                 BlockOverlayService.showOverlay(this@MonitoringService)
             }
             
@@ -103,11 +113,16 @@ class MonitoringService : Service() {
     }
     
     private fun createNotification(): Notification {
-        val notificationIntent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, notificationIntent,
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        // Use getLaunchIntentForPackage to avoid hardcoding MainActivity
+        val notificationIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val pendingIntent = if (notificationIntent != null) {
+            PendingIntent.getActivity(
+                this, 0, notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            null
+        }
         
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ParentLock Active")

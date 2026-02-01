@@ -32,6 +32,24 @@ class NotificationService {
     importance: Importance.high,
   );
 
+  /// SOS Alert channel - highest priority
+  static const AndroidNotificationChannel _sosChannel = AndroidNotificationChannel(
+    'parentlock_sos',
+    'SOS Alerts',
+    description: 'Emergency alerts from your child',
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+  );
+
+  /// Geofence channel
+  static const AndroidNotificationChannel _geofenceChannel = AndroidNotificationChannel(
+    'parentlock_geofence',
+    'Location Alerts',
+    description: 'Alerts when your child enters or leaves a safe zone',
+    importance: Importance.high,
+  );
+
   /// Initialize the notification service
   Future<void> initialize() async {
     // Request permission
@@ -81,12 +99,15 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
-    // Create Android notification channel
+    // Create Android notification channels
     if (Platform.isAndroid) {
-      await _localNotifications
+      final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(_channel);
+              AndroidFlutterLocalNotificationsPlugin>();
+      
+      await androidPlugin?.createNotificationChannel(_channel);
+      await androidPlugin?.createNotificationChannel(_sosChannel);
+      await androidPlugin?.createNotificationChannel(_geofenceChannel);
     }
   }
 
@@ -187,6 +208,109 @@ class NotificationService {
         iOS: const DarwinNotificationDetails(),
       ),
       payload: payload,
+    );
+  }
+
+  /// Show SOS Alert - HIGH PRIORITY emergency notification
+  Future<void> showSosAlert({
+    required String childName,
+    String? message,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final body = message ?? '$childName needs help!';
+    final locationInfo = (latitude != null && longitude != null)
+        ? '\n📍 Location: $latitude, $longitude'
+        : '';
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      '🆘 SOS ALERT from $childName!',
+      '$body$locationInfo',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _sosChannel.id,
+          _sosChannel.name,
+          channelDescription: _sosChannel.description,
+          importance: Importance.max,
+          priority: Priority.max,
+          icon: '@mipmap/ic_launcher',
+          fullScreenIntent: true,
+          category: AndroidNotificationCategory.alarm,
+          visibility: NotificationVisibility.public,
+          playSound: true,
+          enableVibration: true,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.critical,
+        ),
+      ),
+      payload: 'sos:$latitude,$longitude',
+    );
+  }
+
+  /// Show geofence entry/exit notification
+  Future<void> showGeofenceAlert({
+    required String childName,
+    required String zoneName,
+    required bool isEntering,
+  }) async {
+    final action = isEntering ? 'entered' : 'left';
+    final emoji = isEntering ? '✅' : '⚠️';
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      '$emoji $childName $action $zoneName',
+      isEntering 
+          ? '$childName has arrived at $zoneName'
+          : '$childName has left $zoneName',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _geofenceChannel.id,
+          _geofenceChannel.name,
+          channelDescription: _geofenceChannel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: 'geofence:$zoneName:$action',
+    );
+  }
+
+  /// Show schedule notification (device locked/unlocked)
+  Future<void> showScheduleNotification({
+    required String scheduleName,
+    required bool isStarting,
+  }) async {
+    final title = isStarting ? '🔒 $scheduleName Started' : '🔓 $scheduleName Ended';
+    final body = isStarting 
+        ? 'Device restrictions are now active'
+        : 'Device restrictions have ended';
+
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: const DarwinNotificationDetails(),
+      ),
+      payload: 'schedule:$scheduleName:$isStarting',
     );
   }
 

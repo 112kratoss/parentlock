@@ -1,4 +1,4 @@
-package com.parentlock.parentlock
+package com.example.parentlock_native
 
 import android.annotation.SuppressLint
 import android.app.Service
@@ -8,10 +8,10 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 
 class BlockOverlayService : Service() {
@@ -22,6 +22,7 @@ class BlockOverlayService : Service() {
     companion object {
         private val blockedAppsSet = mutableSetOf<String>()
         private var isOverlayShowing = false
+        private var serviceInstance: BlockOverlayService? = null
         
         fun showOverlay(context: Context) {
             if (!isOverlayShowing) {
@@ -48,7 +49,17 @@ class BlockOverlayService : Service() {
         fun updateBlockedApps(blockedApps: List<String>) {
             blockedAppsSet.clear()
             blockedAppsSet.addAll(blockedApps)
+            android.util.Log.d("BlockOverlayService", "Updated blocked apps: $blockedApps")
         }
+        
+        fun isBlocked(packageName: String): Boolean = blockedAppsSet.contains(packageName)
+        
+        fun getBlockedApps(): Set<String> = blockedAppsSet.toSet()
+    }
+    
+    override fun onCreate() {
+        super.onCreate()
+        serviceInstance = this
     }
     
     override fun onBind(intent: Intent?): IBinder? = null
@@ -67,6 +78,7 @@ class BlockOverlayService : Service() {
         
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         
+        // Make overlay focusable so button can be clicked
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -76,25 +88,19 @@ class BlockOverlayService : Service() {
                 @Suppress("DEPRECATION")
                 WindowManager.LayoutParams.TYPE_PHONE
             },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         )
         params.gravity = Gravity.CENTER
         
-        // Create a simple blocking view
-        // In production, you'd want to create a proper layout XML
+        // Create blocking view with Go Back button
         overlayView = createBlockView()
         
         try {
             windowManager?.addView(overlayView, params)
             isOverlayShowing = true
-            
-            // Auto-hide after 3 seconds to allow user to go back
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                hideBlockOverlay()
-            }, 3000)
+            android.util.Log.d("BlockOverlayService", "Overlay shown - persistent until user presses Go Back")
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -109,18 +115,32 @@ class BlockOverlayService : Service() {
             }
             overlayView = null
             isOverlayShowing = false
+            android.util.Log.d("BlockOverlayService", "Overlay hidden")
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
     
+    private fun goToHomeScreen() {
+        // Hide the overlay first
+        hideBlockOverlay()
+        
+        // Send user to home screen
+        val homeIntent = Intent(Intent.ACTION_MAIN)
+        homeIntent.addCategory(Intent.CATEGORY_HOME)
+        homeIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        startActivity(homeIntent)
+        
+        android.util.Log.d("BlockOverlayService", "User sent to home screen")
+    }
+    
     @SuppressLint("SetTextI18n")
     private fun createBlockView(): View {
         // Create a simple LinearLayout programmatically
-        val layout = android.widget.LinearLayout(this)
-        layout.orientation = android.widget.LinearLayout.VERTICAL
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
         layout.gravity = Gravity.CENTER
-        layout.setBackgroundColor(android.graphics.Color.parseColor("#EE000000"))
+        layout.setBackgroundColor(android.graphics.Color.parseColor("#F0000000"))
         layout.layoutParams = android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -136,7 +156,7 @@ class BlockOverlayService : Service() {
         // Add title
         val title = TextView(this)
         title.text = "App Limit Reached"
-        title.textSize = 24f
+        title.textSize = 28f
         title.setTextColor(android.graphics.Color.WHITE)
         title.gravity = Gravity.CENTER
         title.setPadding(32, 32, 32, 16)
@@ -144,18 +164,41 @@ class BlockOverlayService : Service() {
         
         // Add message
         val message = TextView(this)
-        message.text = "You've reached your time limit for this app.\nPlease switch to another activity."
+        message.text = "You've reached your daily time limit for this app.\nAsk your parent to extend the limit."
         message.textSize = 16f
         message.setTextColor(android.graphics.Color.parseColor("#CCFFFFFF"))
         message.gravity = Gravity.CENTER
-        message.setPadding(32, 0, 32, 32)
+        message.setPadding(48, 0, 48, 48)
         layout.addView(message)
+        
+        // Add Go Back button
+        val goBackButton = Button(this)
+        goBackButton.text = "Go Back Home"
+        goBackButton.textSize = 18f
+        goBackButton.setTextColor(android.graphics.Color.WHITE)
+        goBackButton.setBackgroundColor(android.graphics.Color.parseColor("#FF5722"))
+        goBackButton.setPadding(64, 32, 64, 32)
+        
+        val buttonParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        buttonParams.topMargin = 32
+        goBackButton.layoutParams = buttonParams
+        
+        goBackButton.setOnClickListener {
+            goToHomeScreen()
+        }
+        
+        layout.addView(goBackButton)
         
         return layout
     }
     
     override fun onDestroy() {
         hideBlockOverlay()
+        serviceInstance = null
         super.onDestroy()
     }
 }
+

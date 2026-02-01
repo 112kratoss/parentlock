@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 import 'config/supabase_config.dart';
 import 'services/notification_service.dart';
+import 'services/background_service.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized
@@ -30,6 +31,9 @@ void main() async {
   // Initialize Notifications
   final notificationService = NotificationService();
   await notificationService.initialize();
+
+  // Initialize Background Service
+  await BackgroundService().initialize();
 
   // Run the app
   runApp(const ParentLockApp());

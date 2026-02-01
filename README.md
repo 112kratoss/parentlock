@@ -42,3 +42,4 @@ flutter run
 - `lib/services/`: Backend logic for Firebase, Supabase, and Native APIs.
 - `lib/models/`: Data structures.
 - `lib/app_router.dart`: Navigation configuration.
+       
