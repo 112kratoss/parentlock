@@ -11,7 +11,8 @@ import androidx.core.app.NotificationCompat
 
 class MonitoringService : Service() {
     
-    private val handler = Handler(Looper.getMainLooper())
+    private var serviceHandler: Handler? = null
+    private var serviceLooper: Looper? = null
     private val checkInterval = 2000L // Check every 2 seconds
     private var blockedApps = mutableListOf<String>()
     
@@ -41,13 +42,32 @@ class MonitoringService : Service() {
     
     override fun onCreate() {
         super.onCreate()
+        
+        // Start up the thread running the service. Note that we create a
+        // separate thread because the service normally runs in the process's
+        // main thread, which we don't want to block. We also want it to run in
+        // the background so priority doesn't impact the UI.
+        val thread = android.os.HandlerThread("ServiceStartArguments",
+                android.os.Process.THREAD_PRIORITY_BACKGROUND)
+        thread.start()
+        
+        // Get the HandlerThread's Looper and use it for our Handler
+        serviceLooper = thread.looper
+        serviceHandler = Handler(serviceLooper!!)
+        
         createNotificationChannel()
         isServiceRunning = true
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Get blocked apps list
-        blockedApps = intent?.getStringArrayListExtra("blockedApps")?.toMutableList() ?: mutableListOf()
+        val restoredBlockedApps = MonitoringStateStore.getBlockedApps(this)
+        blockedApps =
+            intent?.getStringArrayListExtra("blockedApps")?.toMutableList()
+                ?: restoredBlockedApps.toMutableList()
+        MonitoringStateStore.setMonitoringEnabled(this, true)
+        MonitoringStateStore.saveBlockedApps(this, blockedApps)
+        BlockOverlayService.updateBlockedApps(blockedApps)
         
         // Start foreground
         val notification = createNotification()
@@ -61,7 +81,7 @@ class MonitoringService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
         
-        // Start monitoring loop
+        // Start monitoring loop on background thread
         startMonitoring()
         
         return START_STICKY
@@ -72,30 +92,67 @@ class MonitoringService : Service() {
     override fun onDestroy() {
         stopMonitoring()
         isServiceRunning = false
+        serviceLooper?.quit()
         super.onDestroy()
     }
     
     private val monitoringRunnable = object : Runnable {
         override fun run() {
-            val currentApp = UsageStatsService.getCurrentForegroundApp(this@MonitoringService)
+            try {
+                val currentApp = UsageStatsService.getCurrentForegroundApp(this@MonitoringService)
             
-            // Use BlockOverlayService's blocked apps set (updated dynamically from Flutter)
-            if (currentApp != null && BlockOverlayService.isBlocked(currentApp)) {
-                // Blocked app detected, show overlay
-                android.util.Log.d("MonitoringService", "Blocked app detected: $currentApp")
-                BlockOverlayService.showOverlay(this@MonitoringService)
+                // Use BlockOverlayService's blocked apps set (updated dynamically from Flutter)
+                if (currentApp != null && BlockOverlayService.isBlocked(currentApp)) {
+                    // Blocked app detected, show overlay
+                    android.util.Log.d("MonitoringService", "Blocked app detected: $currentApp")
+                    
+                    // Post UI update to Main Thread
+                    Handler(Looper.getMainLooper()).post {
+                         BlockOverlayService.showOverlay(this@MonitoringService)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MonitoringService", "Error in monitoring loop", e)
             }
             
-            handler.postDelayed(this, checkInterval)
+            serviceHandler?.postDelayed(this, checkInterval)
         }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (!MonitoringStateStore.isMonitoringEnabled(this)) {
+            return
+        }
+        android.util.Log.d("MonitoringService", "Task removed, restarting service")
+        
+        val restartServiceIntent = Intent(applicationContext, MonitoringService::class.java).also {
+            it.setPackage(packageName)
+            // Re-pass the list of blocked apps if possible, though they might be lost in this context specifically.
+            // Ideally should persist blocked apps to SharedPreferences for full resilience.
+            // For now, restarting the service is the priority.
+             it.putStringArrayListExtra("blockedApps", ArrayList(blockedApps))
+        }
+
+        val restartServicePendingIntent = PendingIntent.getService(
+            applicationContext, 1, restartServiceIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val alarmService = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmService.set(
+            AlarmManager.ELAPSED_REALTIME,
+            android.os.SystemClock.elapsedRealtime() + 1000,
+            restartServicePendingIntent
+        )
     }
     
     private fun startMonitoring() {
-        handler.post(monitoringRunnable)
+        serviceHandler?.removeCallbacks(monitoringRunnable)
+        serviceHandler?.post(monitoringRunnable)
     }
     
     private fun stopMonitoring() {
-        handler.removeCallbacks(monitoringRunnable)
+        serviceHandler?.removeCallbacks(monitoringRunnable)
     }
     
     private fun createNotificationChannel() {

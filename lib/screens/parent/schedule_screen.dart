@@ -1,5 +1,5 @@
 /// Schedule Screen
-/// 
+///
 /// Parent view for managing screen time schedules (bedtime, homework, allowed hours).
 library;
 
@@ -12,11 +12,7 @@ class ScheduleScreen extends StatefulWidget {
   final String childId;
   final String? childName;
 
-  const ScheduleScreen({
-    super.key,
-    required this.childId,
-    this.childName,
-  });
+  const ScheduleScreen({super.key, required this.childId, this.childName});
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
@@ -43,9 +39,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       setState(() => _schedules = schedules);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading schedules: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading schedules: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -63,8 +59,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _schedules.isEmpty
-              ? _buildEmptyState()
-              : _buildScheduleList(),
+          ? _buildEmptyState()
+          : _buildScheduleList(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showScheduleEditor(null),
         icon: const Icon(Icons.add),
@@ -82,9 +78,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           const SizedBox(height: 16),
           Text(
             'No schedules yet',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: Colors.grey,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(color: Colors.grey),
           ),
           const SizedBox(height: 8),
           Text(
@@ -118,9 +114,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       await _loadSchedules();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating schedule: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error updating schedule: $e')));
       }
     }
   }
@@ -151,9 +147,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         await _loadSchedules();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       }
     }
@@ -182,15 +178,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(existing != null ? 'Schedule updated!' : 'Schedule created!'),
+              content: Text(
+                existing != null ? 'Schedule updated!' : 'Schedule created!',
+              ),
             ),
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       }
     }
@@ -235,9 +233,8 @@ class _ScheduleCard extends StatelessWidget {
                     children: [
                       Text(
                         schedule.name,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       Text(
                         schedule.timeRangeDisplay,
@@ -249,7 +246,7 @@ class _ScheduleCard extends StatelessWidget {
                 Switch(
                   value: schedule.isActive,
                   onChanged: onToggle,
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                 ),
               ],
             ),
@@ -265,7 +262,10 @@ class _ScheduleCard extends StatelessWidget {
                 const Spacer(),
                 if (schedule.blockAllApps)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.red.shade100,
                       borderRadius: BorderRadius.circular(8),
@@ -357,13 +357,21 @@ class _ScheduleEditorSheetState extends State<_ScheduleEditorSheet> {
     _type = existing?.scheduleType ?? ScheduleType.bedtime;
     _daysOfWeek = existing?.daysOfWeek ?? [0, 1, 2, 3, 4, 5, 6];
     _startTime = existing != null
-        ? TimeOfDay(hour: existing.startTime.hour, minute: existing.startTime.minute)
+        ? TimeOfDay(
+            hour: existing.startTime.hour,
+            minute: existing.startTime.minute,
+          )
         : const TimeOfDay(hour: 21, minute: 0);
     _endTime = existing != null
-        ? TimeOfDay(hour: existing.endTime.hour, minute: existing.endTime.minute)
+        ? TimeOfDay(
+            hour: existing.endTime.hour,
+            minute: existing.endTime.minute,
+          )
         : const TimeOfDay(hour: 7, minute: 0);
     _blockAllApps = existing?.blockAllApps ?? true;
-    _blockedCategories = Set.from(existing?.blockedCategories ?? ['games', 'social']);
+    _blockedCategories = Set.from(
+      existing?.blockedCategories ?? ['games', 'social'],
+    );
   }
 
   @override
@@ -401,11 +409,15 @@ class _ScheduleEditorSheetState extends State<_ScheduleEditorSheet> {
             Text('Type', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             SegmentedButton<ScheduleType>(
-              segments: ScheduleType.values.map((t) => ButtonSegment(
-                value: t,
-                label: Text(t.displayName),
-                icon: Text(t.icon),
-              )).toList(),
+              segments: ScheduleType.values
+                  .map(
+                    (t) => ButtonSegment(
+                      value: t,
+                      label: Text(t.displayName),
+                      icon: Text(t.icon),
+                    ),
+                  )
+                  .toList(),
               selected: {_type},
               onSelectionChanged: (s) => setState(() => _type = s.first),
             ),
@@ -451,22 +463,29 @@ class _ScheduleEditorSheetState extends State<_ScheduleEditorSheet> {
                 onChanged: (v) => setState(() => _blockAllApps = v ?? false),
               ),
               if (!_blockAllApps) ...[
-                Text('Block categories:', style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  'Block categories:',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 Wrap(
                   spacing: 8,
-                  children: ['games', 'social', 'video'].map((cat) => FilterChip(
-                    label: Text(cat),
-                    selected: _blockedCategories.contains(cat),
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _blockedCategories.add(cat);
-                        } else {
-                          _blockedCategories.remove(cat);
-                        }
-                      });
-                    },
-                  )).toList(),
+                  children: ['games', 'social', 'video']
+                      .map(
+                        (cat) => FilterChip(
+                          label: Text(cat),
+                          selected: _blockedCategories.contains(cat),
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _blockedCategories.add(cat);
+                              } else {
+                                _blockedCategories.remove(cat);
+                              }
+                            });
+                          },
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
             ],
@@ -489,9 +508,9 @@ class _ScheduleEditorSheetState extends State<_ScheduleEditorSheet> {
 
   void _save() {
     if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter a name')));
       return;
     }
 
@@ -502,7 +521,10 @@ class _ScheduleEditorSheetState extends State<_ScheduleEditorSheet> {
       name: _nameController.text,
       scheduleType: _type,
       daysOfWeek: _daysOfWeek,
-      startTime: TimeOfDayData(hour: _startTime.hour, minute: _startTime.minute),
+      startTime: TimeOfDayData(
+        hour: _startTime.hour,
+        minute: _startTime.minute,
+      ),
       endTime: TimeOfDayData(hour: _endTime.hour, minute: _endTime.minute),
       blockedCategories: _type == ScheduleType.homework
           ? _blockedCategories.toList()
@@ -545,7 +567,10 @@ class _TimePickerTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
             const SizedBox(height: 4),
             Text(
               time.format(context),
@@ -562,10 +587,7 @@ class _DaySelector extends StatelessWidget {
   final List<int> selectedDays;
   final void Function(List<int>) onChanged;
 
-  const _DaySelector({
-    required this.selectedDays,
-    required this.onChanged,
-  });
+  const _DaySelector({required this.selectedDays, required this.onChanged});
 
   static const _dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 

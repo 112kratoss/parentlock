@@ -1,5 +1,5 @@
 /// Location Screen
-/// 
+///
 /// Parent view showing child's real-time location on a map with history trail.
 library;
 
@@ -14,11 +14,7 @@ class LocationScreen extends StatefulWidget {
   final String childId;
   final String? childName;
 
-  const LocationScreen({
-    super.key,
-    required this.childId,
-    this.childName,
-  });
+  const LocationScreen({super.key, required this.childId, this.childName});
 
   @override
   State<LocationScreen> createState() => _LocationScreenState();
@@ -43,7 +39,7 @@ class _LocationScreenState extends State<LocationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final [location, history, geofences] = await Future.wait([
+      final [location, history, geofences] = await Future.wait<dynamic>([
         _locationService.getLatestLocation(widget.childId),
         _locationService.getLocationHistory(widget.childId, hours: 24),
         _locationService.getGeofences(widget.childId),
@@ -55,18 +51,22 @@ class _LocationScreenState extends State<LocationScreen> {
         _geofences = geofences as List<Geofence>;
       });
 
-      // Center map on current location if available
+      // Center map on current location if available (after frame renders)
       if (_currentLocation != null) {
-        _mapController.move(
-          LatLng(_currentLocation!.latitude, _currentLocation!.longitude),
-          15,
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _mapController.move(
+              LatLng(_currentLocation!.latitude, _currentLocation!.longitude),
+              15,
+            );
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading location: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading location: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -81,10 +81,7 @@ class _LocationScreenState extends State<LocationScreen> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
       ),
       body: _isLoading
@@ -92,16 +89,10 @@ class _LocationScreenState extends State<LocationScreen> {
           : Column(
               children: [
                 // Map
-                Expanded(
-                  flex: 3,
-                  child: _buildMap(),
-                ),
+                Expanded(flex: 3, child: _buildMap()),
 
                 // Info Panel
-                Expanded(
-                  flex: 2,
-                  child: _buildInfoPanel(),
-                ),
+                Expanded(flex: 2, child: _buildInfoPanel()),
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
@@ -120,10 +111,7 @@ class _LocationScreenState extends State<LocationScreen> {
 
     return FlutterMap(
       mapController: _mapController,
-      options: MapOptions(
-        initialCenter: center,
-        initialZoom: 15,
-      ),
+      options: MapOptions(initialCenter: center, initialZoom: 15),
       children: [
         // OpenStreetMap tiles
         TileLayer(
@@ -133,14 +121,18 @@ class _LocationScreenState extends State<LocationScreen> {
 
         // Geofence circles
         CircleLayer(
-          circles: _geofences.map((g) => CircleMarker(
-            point: LatLng(g.latitude, g.longitude),
-            radius: g.radiusMeters.toDouble(),
-            color: Colors.blue.withOpacity(0.2),
-            borderColor: Colors.blue,
-            borderStrokeWidth: 2,
-            useRadiusInMeter: true,
-          )).toList(),
+          circles: _geofences
+              .map(
+                (g) => CircleMarker(
+                  point: LatLng(g.latitude, g.longitude),
+                  radius: g.radiusMeters.toDouble(),
+                  color: Colors.blue.withValues(alpha: 0.2),
+                  borderColor: Colors.blue,
+                  borderStrokeWidth: 2,
+                  useRadiusInMeter: true,
+                ),
+              )
+              .toList(),
         ),
 
         // Location history trail
@@ -151,7 +143,7 @@ class _LocationScreenState extends State<LocationScreen> {
                 points: _locationHistory
                     .map((l) => LatLng(l.latitude, l.longitude))
                     .toList(),
-                color: Colors.blue.withOpacity(0.5),
+                color: Colors.blue.withValues(alpha: 0.5),
                 strokeWidth: 3,
               ),
           ],
@@ -161,24 +153,34 @@ class _LocationScreenState extends State<LocationScreen> {
         MarkerLayer(
           markers: [
             // Geofence labels
-            ..._geofences.map((g) => Marker(
-              point: LatLng(g.latitude, g.longitude),
-              width: 100,
-              height: 30,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                ),
-                child: Text(
-                  g.name,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
+            ..._geofences.map(
+              (g) => Marker(
+                point: LatLng(g.latitude, g.longitude),
+                width: 100,
+                height: 30,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black26, blurRadius: 4),
+                    ],
+                  ),
+                  child: Text(
+                    g.name,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
-            )),
+            ),
 
             // Current location marker
             if (_currentLocation != null)
@@ -194,7 +196,9 @@ class _LocationScreenState extends State<LocationScreen> {
                     color: Colors.green,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                    boxShadow: [
+                      BoxShadow(color: Colors.black26, blurRadius: 8),
+                    ],
                   ),
                   child: const Icon(
                     Icons.child_care,
@@ -214,7 +218,13 @@ class _LocationScreenState extends State<LocationScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -2))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -237,27 +247,34 @@ class _LocationScreenState extends State<LocationScreen> {
             // Location History
             Text(
               '📍 Location History',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
 
             if (_locationHistory.isEmpty)
-              const Text('No history available', style: TextStyle(color: Colors.grey))
+              const Text(
+                'No history available',
+                style: TextStyle(color: Colors.grey),
+              )
             else
-              ..._locationHistory.take(5).map((location) => ListTile(
-                dense: true,
-                leading: const Icon(Icons.location_on, size: 20),
-                title: Text(
-                  _formatTime(location.recordedAt),
-                  style: const TextStyle(fontSize: 14),
-                ),
-                subtitle: Text(
-                  '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              )),
+              ..._locationHistory
+                  .take(5)
+                  .map(
+                    (location) => ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.location_on, size: 20),
+                      title: Text(
+                        _formatTime(location.recordedAt),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
 
             const SizedBox(height: 16),
 
@@ -280,18 +297,23 @@ class _LocationScreenState extends State<LocationScreen> {
             const SizedBox(height: 8),
 
             if (_geofences.isEmpty)
-              const Text('No safe zones set up', style: TextStyle(color: Colors.grey))
+              const Text(
+                'No safe zones set up',
+                style: TextStyle(color: Colors.grey),
+              )
             else
-              ..._geofences.map((g) => ListTile(
-                dense: true,
-                leading: const Icon(Icons.shield, color: Colors.blue),
-                title: Text(g.name),
-                subtitle: Text('${g.radiusMeters}m radius'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _deleteGeofence(g),
+              ..._geofences.map(
+                (g) => ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.shield, color: Colors.blue),
+                  title: Text(g.name),
+                  subtitle: Text('${g.radiusMeters}m radius'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _deleteGeofence(g),
+                  ),
                 ),
-              )),
+              ),
           ],
         ),
       ),
@@ -341,10 +363,13 @@ class _LocationScreenState extends State<LocationScreen> {
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time);
+    final minutes = diff.inMinutes.abs(); // Use absolute value
 
-    if (diff.inMinutes < 60) {
-      return '${diff.inMinutes} minutes ago';
-    } else if (diff.inHours < 24) {
+    if (minutes < 1) {
+      return 'Just now';
+    } else if (minutes < 60) {
+      return '$minutes minutes ago';
+    } else if (diff.inHours.abs() < 24) {
       final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
       final ampm = time.hour < 12 ? 'AM' : 'PM';
       return '$hour:${time.minute.toString().padLeft(2, '0')} $ampm';
@@ -445,15 +470,15 @@ class _LocationScreenState extends State<LocationScreen> {
       await _loadData();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Safe zone "$name" created!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Safe zone "$name" created!')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating safe zone: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error creating safe zone: $e')));
       }
     }
   }

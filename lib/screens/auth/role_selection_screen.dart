@@ -1,5 +1,5 @@
 /// Role Selection Screen
-/// 
+///
 /// Allows users to choose between Parent and Child roles
 library;
 
@@ -23,7 +23,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
     try {
       await _authService.updateRole(role);
-      
+
       if (mounted) {
         if (role == 'parent') {
           context.go('/parent/dashboard');
@@ -54,7 +54,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.8),
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
               Theme.of(context).colorScheme.surface,
             ],
           ),
@@ -65,7 +65,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             child: Column(
               children: [
                 const Spacer(),
-                
+
                 // Title
                 Text(
                   'Choose Your Role',
@@ -78,13 +78,13 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 Text(
                   'Are you setting up this device as a parent or child?',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white70,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: Colors.white70),
                 ),
-                
+
                 const SizedBox(height: 48),
-                
+
                 // Role Cards
                 Expanded(
                   flex: 3,
@@ -94,7 +94,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       Expanded(
                         child: _RoleCard(
                           title: 'Parent',
-                          description: 'Monitor children\'s screen time, set limits, and receive notifications.',
+                          description:
+                              'Monitor children\'s screen time, set limits, and receive notifications.',
                           icon: Icons.admin_panel_settings,
                           color: Colors.blue,
                           isLoading: _isLoading,
@@ -106,7 +107,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       Expanded(
                         child: _RoleCard(
                           title: 'Child',
-                          description: 'This device will be monitored. Apps may be limited based on parent settings.',
+                          description:
+                              'This device will be monitored. Apps may be limited based on parent settings.',
                           icon: Icons.child_care,
                           color: Colors.green,
                           isLoading: _isLoading,
@@ -116,9 +118,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                     ],
                   ),
                 ),
-                
+
                 const Spacer(),
-                
+
                 // Logout option
                 TextButton.icon(
                   onPressed: () async {
@@ -161,9 +163,7 @@ class _RoleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 8,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: InkWell(
         onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(20),
@@ -179,11 +179,7 @@ class _RoleCard extends StatelessWidget {
                   color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  size: 40,
-                  color: color,
-                ),
+                child: Icon(icon, size: 40, color: color),
               ),
               const SizedBox(height: 12),
               Text(
@@ -198,9 +194,9 @@ class _RoleCard extends StatelessWidget {
                 child: Text(
                   description,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -7,6 +7,7 @@
 - Your iPhone needs to be running **iOS 15 or newer**
 - You'll need a Mac computer with Xcode installed
 - This setup takes about 10-15 minutes
+- The repo now includes Screen Time scaffold sources in `ios/ScreenTimeExtensions/`, but you still need to create the real extension targets in Xcode
 
 ---
 

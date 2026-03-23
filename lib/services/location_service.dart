@@ -1,22 +1,34 @@
 /// Location Service
-/// 
+///
 /// Handles GPS tracking, geofence management, and SOS alerts.
 /// Uses geolocator for cross-platform location access.
 library;
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/location_record.dart';
 import '../models/geofence.dart';
 
 class LocationService {
+  static const Duration _periodicFlushInterval = Duration(minutes: 5);
+  static const int _maxPendingLocations = 10;
+
+  static final LocationService _instance = LocationService._internal();
+
+  factory LocationService() {
+    return _instance;
+  }
+
+  LocationService._internal();
+
   final SupabaseClient _supabase = Supabase.instance.client;
-  
+
   // Batching state
   final List<Map<String, dynamic>> _pendingLocations = [];
-  DateTime? _lastFlushTime;
+  DateTime? _oldestPendingLocationAt;
 
   // Tracking state
   String? _currentChildId;
@@ -26,27 +38,56 @@ class LocationService {
 
   /// Start continuous location tracking (for child device)
   Future<void> startTracking(String childId) async {
-    _currentChildId = childId;
-    
     // Stop any existing tracking
     await stopTracking();
 
+    _currentChildId = childId;
+
     // Configure location settings
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 50, // Update every 50 meters
-    );
+    LocationSettings locationSettings;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Update every 10 meters
+        forceLocationManager: true,
+        intervalDuration: const Duration(seconds: 10),
+        // Foreground notification config
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: "ParentLock Active",
+          notificationText: "Monitoring child location for safety",
+          enableWakeLock: true,
+        ),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        activityType: ActivityType.fitness,
+        distanceFilter: 10,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    } else {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      );
+    }
 
     // Start listening to position stream
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen((Position position) {
-      _onLocationUpdate(position);
-    });
+    _positionSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (Position position) {
+            _onLocationUpdate(position);
+          },
+          onError: (e) {
+            debugPrint('LocationService stream error: $e');
+          },
+        );
 
-    // Also upload/flush periodically (every 15 minutes) - OPTIMIZED from 5m
+    // Also upload/flush periodically (every 5 minutes)
     _uploadTimer = Timer.periodic(
-      const Duration(minutes: 15),
+      _periodicFlushInterval,
       (_) => _uploadCurrentLocation(),
     );
 
@@ -60,11 +101,15 @@ class LocationService {
     _positionSubscription = null;
     _uploadTimer?.cancel();
     _uploadTimer = null;
-    
+
     // Flux remaining locations
     await _flushLocations();
-    
+
     _currentChildId = null;
+  }
+
+  Future<void> handleLocationUpdate(Position position) async {
+    _onLocationUpdate(position);
   }
 
   void _onLocationUpdate(Position position) async {
@@ -99,9 +144,8 @@ class LocationService {
 
       // Force flush on periodic timer
       await _flushLocations();
-
     } catch (e) {
-      // Ignore errors in periodic upload
+      debugPrint('LocationService upload error: $e');
     }
   }
 
@@ -118,13 +162,22 @@ class LocationService {
       'longitude': longitude,
       'accuracy': accuracy,
       'battery_level': batteryLevel,
-      'recorded_at': DateTime.now().toIso8601String(), 
+      'recorded_at': DateTime.now().toIso8601String(),
     };
 
+    if (_pendingLocations.isEmpty) {
+      _oldestPendingLocationAt = DateTime.now();
+    }
     _pendingLocations.add(record);
-    
-    // Auto-flush if batch gets too large
-    if (_pendingLocations.length >= 10) {
+
+    final oldestPendingLocationAt = _oldestPendingLocationAt;
+    final hasPendingForTooLong =
+        oldestPendingLocationAt != null &&
+        DateTime.now().difference(oldestPendingLocationAt) >=
+            _periodicFlushInterval;
+
+    if (_pendingLocations.length >= _maxPendingLocations ||
+        hasPendingForTooLong) {
       await _flushLocations();
     }
   }
@@ -135,20 +188,26 @@ class LocationService {
 
     final batch = List<Map<String, dynamic>>.from(_pendingLocations);
     _pendingLocations.clear();
-    _lastFlushTime = DateTime.now();
+    _oldestPendingLocationAt = null;
 
     try {
       await _supabase.from('location_records').insert(batch);
-      // print('Ids flushed: ${batch.length}');
     } catch (e) {
-      // On failure, re-add to pending (at start to preserve order roughly, or end? 
-      // simple retry logic: put them back)
-      // For simplicity/memory safety, we drop extremely old ones or just log error.
-      // Re-adding ensures no data loss, but can cause memory leak if DB down.
-      // Let's just log for now to avoid complexity in this refactor.
-      // In production, maybe keep a capped buffer.
-      print('Failed to flush locations: $e');
+      _pendingLocations.insertAll(0, batch);
+      _oldestPendingLocationAt ??= _extractRecordedAt(batch.first);
+      debugPrint('Failed to flush locations: $e');
+      if (e is PostgrestException) {
+        debugPrint('Postgrest error: ${e.message} - ${e.details} - ${e.hint}');
+      }
     }
+  }
+
+  DateTime? _extractRecordedAt(Map<String, dynamic> record) {
+    final recordedAt = record['recorded_at'];
+    if (recordedAt is String) {
+      return DateTime.tryParse(recordedAt);
+    }
+    return null;
   }
 
   // ==================== LOCATION HISTORY ====================
@@ -211,9 +270,7 @@ class LocationService {
         .eq('child_id', childId)
         .eq('is_active', true);
 
-    return (response as List)
-        .map((json) => Geofence.fromJson(json))
-        .toList();
+    return (response as List).map((json) => Geofence.fromJson(json)).toList();
   }
 
   /// Update a geofence
@@ -232,8 +289,10 @@ class LocationService {
   /// Check if position is inside a geofence
   bool isInsideGeofence(double lat, double lng, Geofence geofence) {
     final distance = _calculateDistance(
-      lat, lng,
-      geofence.latitude, geofence.longitude,
+      lat,
+      lng,
+      geofence.latitude,
+      geofence.longitude,
     );
     return distance <= geofence.radiusMeters;
   }
@@ -310,6 +369,7 @@ class LocationService {
         desiredAccuracy: LocationAccuracy.high,
       );
     } catch (e) {
+      debugPrint('LocationService SOS location error: $e');
       // Continue without location if unable to get it
     }
 
@@ -348,15 +408,18 @@ class LocationService {
 
   /// Calculate distance between two points in meters (Haversine formula)
   double _calculateDistance(
-    double lat1, double lon1,
-    double lat2, double lon2,
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
   ) {
     const double earthRadius = 6371000; // meters
 
     final dLat = _toRadians(lat2 - lat1);
     final dLon = _toRadians(lon2 - lon1);
 
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_toRadians(lat1)) *
             math.cos(_toRadians(lat2)) *
             math.sin(dLon / 2) *

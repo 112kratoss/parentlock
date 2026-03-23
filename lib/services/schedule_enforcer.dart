@@ -39,6 +39,7 @@ class ScheduleEnforcer {
     required String childId,
     LockStateCallback? onLockStateChange,
   }) async {
+    stopEnforcing();
     _currentChildId = childId;
     _onLockStateChange = onLockStateChange;
 
@@ -175,12 +176,20 @@ class ScheduleEnforcer {
 
     try {
       final usageStats = await _nativeService.getFullUsageStats();
+      final normalizedCategories = categories.map(_normalizeCategory).toSet();
 
       // Block apps matching the categories
       final appsToBlock =
           usageStats
+              .where((app) {
+                final packageName = app['packageName'] as String? ?? '';
+                final nativeCategory = app['app_category'] as String?;
+                final effectiveCategory = _normalizeCategory(
+                  nativeCategory ?? _detectAppCategory(packageName),
+                );
+                return normalizedCategories.contains(effectiveCategory);
+              })
               .map((app) => app['packageName'] as String)
-              .where((pkg) => categories.contains(_detectAppCategory(pkg)))
               .toList()
             ..sort();
 
@@ -252,6 +261,16 @@ class ScheduleEnforcer {
     }
 
     return 'other';
+  }
+
+  String _normalizeCategory(String category) {
+    switch (category.toLowerCase()) {
+      case 'games':
+      case 'game':
+        return 'game';
+      default:
+        return category.toLowerCase();
+    }
   }
 
   /// Notify listener about lock state change

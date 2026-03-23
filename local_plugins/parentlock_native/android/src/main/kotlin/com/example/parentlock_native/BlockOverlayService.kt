@@ -50,6 +50,9 @@ class BlockOverlayService : Service() {
             blockedAppsSet.clear()
             blockedAppsSet.addAll(blockedApps)
             android.util.Log.d("BlockOverlayService", "Updated blocked apps: $blockedApps")
+            if (blockedAppsSet.isEmpty()) {
+                serviceInstance?.hideBlockOverlay()
+            }
         }
         
         fun isBlocked(packageName: String): Boolean = blockedAppsSet.contains(packageName)
@@ -201,4 +204,3 @@ class BlockOverlayService : Service() {
         super.onDestroy()
     }
 }
-

@@ -1,5 +1,5 @@
 /// Lock Screen
-/// 
+///
 /// Full-screen overlay shown when a schedule is blocking device usage.
 library;
 
@@ -12,11 +12,7 @@ class LockScreen extends StatelessWidget {
   final LockScreenInfo info;
   final VoidCallback? onEmergencyCall;
 
-  const LockScreen({
-    super.key,
-    required this.info,
-    this.onEmergencyCall,
-  });
+  const LockScreen({super.key, required this.info, this.onEmergencyCall});
 
   @override
   Widget build(BuildContext context) {
@@ -36,10 +32,7 @@ class LockScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Icon
-              Text(
-                info.icon,
-                style: const TextStyle(fontSize: 80),
-              ),
+              Text(info.icon, style: const TextStyle(fontSize: 80)),
               const SizedBox(height: 32),
 
               // Title
@@ -61,7 +54,7 @@ class LockScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 18,
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
               ),
@@ -69,9 +62,12 @@ class LockScreen extends StatelessWidget {
 
               // Unlock time
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Row(
@@ -98,7 +94,10 @@ class LockScreen extends StatelessWidget {
                   onPressed: onEmergencyCall,
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.white70,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                   ),
                   icon: const Icon(Icons.phone),
                   label: const Text('Emergency Call'),
@@ -130,15 +129,9 @@ class LockScreen extends StatelessWidget {
           const Color(0xFF0f3460),
         ];
       case ScheduleType.homework:
-        return [
-          const Color(0xFF134e5e),
-          const Color(0xFF71b280),
-        ];
+        return [const Color(0xFF134e5e), const Color(0xFF71b280)];
       case ScheduleType.allowedHours:
-        return [
-          const Color(0xFF2c3e50),
-          const Color(0xFF4ca1af),
-        ];
+        return [const Color(0xFF2c3e50), const Color(0xFF4ca1af)];
     }
   }
 }
@@ -148,11 +141,7 @@ class SosButtonWidget extends StatefulWidget {
   final String childId;
   final VoidCallback? onSosSent;
 
-  const SosButtonWidget({
-    super.key,
-    required this.childId,
-    this.onSosSent,
-  });
+  const SosButtonWidget({super.key, required this.childId, this.onSosSent});
 
   @override
   State<SosButtonWidget> createState() => _SosButtonWidgetState();
@@ -218,9 +207,9 @@ class _SosButtonWidgetState extends State<SosButtonWidget>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send SOS: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send SOS: $e')));
       }
     } finally {
       setState(() {
@@ -245,13 +234,10 @@ class _SosButtonWidgetState extends State<SosButtonWidget>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.red,
-              border: Border.all(
-                color: Colors.white,
-                width: 3,
-              ),
+              border: Border.all(color: Colors.white, width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.red.withOpacity(_isPressed ? 0.6 : 0.3),
+                  color: Colors.red.withValues(alpha: _isPressed ? 0.6 : 0.3),
                   blurRadius: _isPressed ? 20 : 10,
                   spreadRadius: _isPressed ? 5 : 2,
                 ),

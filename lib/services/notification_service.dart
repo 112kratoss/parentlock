@@ -8,6 +8,7 @@ library;
 
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'auth_service.dart';
 
@@ -15,7 +16,7 @@ import 'auth_service.dart';
 @pragma('vm:entry-point')
 Future<void> handleBackgroundMessage(RemoteMessage message) async {
   // Handle background message
-  print('Background message: ${message.notification?.title}');
+  debugPrint('Background message: ${message.notification?.title}');
 }
 
 class NotificationService {
@@ -55,7 +56,7 @@ class NotificationService {
   /// Initialize the notification service
   Future<void> initialize() async {
     // Request permission
-    await _requestPermission();
+    await ensureUserPermission();
 
     // Set up local notifications
     await _setupLocalNotifications();
@@ -76,7 +77,7 @@ class NotificationService {
   }
 
   /// Request notification permissions
-  Future<void> _requestPermission() async {
+  Future<bool> ensureUserPermission() async {
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -84,7 +85,13 @@ class NotificationService {
       provisional: false,
     );
 
-    print('Notification permission status: ${settings.authorizationStatus}');
+    final granted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+    debugPrint(
+      'Notification permission status: ${settings.authorizationStatus}',
+    );
+    return granted;
   }
 
   /// Set up local notifications for foreground display
@@ -127,7 +134,7 @@ class NotificationService {
   /// Handle notification tap
   void _onNotificationTap(NotificationResponse response) {
     // Handle notification tap - navigate to relevant screen
-    print('Notification tapped: ${response.payload}');
+    debugPrint('Notification tapped: ${response.payload}');
   }
 
   /// Get FCM token and save to user profile
@@ -137,7 +144,7 @@ class NotificationService {
 
       if (token != null) {
         await syncCurrentTokenToProfile();
-        print('FCM Token: $token');
+        debugPrint('FCM token refreshed for current profile');
       }
 
       // Listen for token refresh
@@ -147,7 +154,7 @@ class NotificationService {
 
       return token;
     } catch (e) {
-      print('Failed to get FCM token: $e');
+      debugPrint('Failed to get FCM token: $e');
       return null;
     }
   }
@@ -196,7 +203,7 @@ class NotificationService {
 
   /// Handle when app is opened from notification
   void _handleNotificationOpen(RemoteMessage message) {
-    print('App opened from notification: ${message.data}');
+    debugPrint('App opened from notification: ${message.data}');
     // Navigate based on message data
   }
 

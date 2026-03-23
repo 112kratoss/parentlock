@@ -1,5 +1,5 @@
 /// Splash Screen
-/// 
+///
 /// Initial loading screen that checks authentication status
 /// and redirects to appropriate screen
 library;
@@ -15,7 +15,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   final _authService = AuthService();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -23,16 +24,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
     );
-    
+
     _animationController.forward();
     _checkAuth();
   }
@@ -52,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     if (_authService.isLoggedIn) {
       // User is logged in, check their role
       final profile = await _authService.getCurrentProfile();
-      
+
       if (!mounted) return;
 
       if (profile == null || profile.role == 'pending') {
@@ -92,7 +93,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -102,7 +103,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // App Name
                 const Text(
                   'ParentLock',
@@ -114,17 +115,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Tagline
                 Text(
                   'Secure Screen Time Management',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                 ),
                 const SizedBox(height: 48),
-                
+
                 // Loading indicator
                 const CircularProgressIndicator(
                   color: Colors.white,

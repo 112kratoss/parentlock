@@ -44,34 +44,33 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
       await _notificationService.syncCurrentTokenToProfile();
+      if (!mounted) return;
 
-      if (mounted) {
-        // Check if user has a profile/role
-        final profile = await _authService.getCurrentProfile();
+      // Check if user has a profile/role
+      final profile = await _authService.getCurrentProfile();
+      if (!mounted) return;
 
-        if (profile == null) {
-          // New user without role - go to role selection
-          context.go('/role-selection');
-        } else if (profile.isParent) {
-          context.go('/parent/dashboard');
+      if (profile == null) {
+        // New user without role - go to role selection
+        context.go('/role-selection');
+      } else if (profile.isParent) {
+        context.go('/parent/dashboard');
+      } else {
+        // Child: check if linked to parent
+        if (profile.linkedTo == null) {
+          context.go('/child/link');
         } else {
-          // Child: check if linked to parent
-          if (profile.linkedTo == null) {
-            context.go('/child/link');
-          } else {
-            context.go('/child/active');
-          }
+          context.go('/child/active');
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -89,34 +88,33 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       await _notificationService.syncCurrentTokenToProfile();
+      if (!mounted) return;
 
-      if (mounted) {
-        // Check if user has a profile/role
-        final profile = await _authService.getCurrentProfile();
+      // Check if user has a profile/role
+      final profile = await _authService.getCurrentProfile();
+      if (!mounted) return;
 
-        if (profile == null || profile.role == 'pending') {
-          // New user without role - go to role selection
-          context.go('/role-selection');
-        } else if (profile.isParent) {
-          context.go('/parent/dashboard');
+      if (profile == null || profile.role == 'pending') {
+        // New user without role - go to role selection
+        context.go('/role-selection');
+      } else if (profile.isParent) {
+        context.go('/parent/dashboard');
+      } else {
+        // Child: check if linked to parent
+        if (profile.linkedTo == null) {
+          context.go('/child/link');
         } else {
-          // Child: check if linked to parent
-          if (profile.linkedTo == null) {
-            context.go('/child/link');
-          } else {
-            context.go('/child/active');
-          }
+          context.go('/child/active');
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
     }

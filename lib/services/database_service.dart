@@ -1,5 +1,5 @@
 /// Database Service
-/// 
+///
 /// Handles all Supabase database operations for:
 /// - Child activity tracking
 /// - App usage statistics
@@ -22,7 +22,7 @@ extension StringExtension on String {
 
 class DatabaseService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  
+
   SupabaseClient get supabase => _supabase;
 
   // ==================== PROFILES ====================
@@ -71,14 +71,16 @@ class DatabaseService {
   }
 
   /// Get all activities for all children of a parent
-  Future<List<ChildActivity>> getParentChildrenActivities(String parentId) async {
+  Future<List<ChildActivity>> getParentChildrenActivities(
+    String parentId,
+  ) async {
     // First get all children
     final children = await getLinkedChildren(parentId);
-    
+
     if (children.isEmpty) return [];
 
     final childIds = children.map((c) => c.id).toList();
-    
+
     final response = await _supabase
         .from('child_activity')
         .select()
@@ -92,9 +94,7 @@ class DatabaseService {
 
   /// Add or update app activity for a child
   Future<void> upsertActivity(ChildActivity activity) async {
-    await _supabase
-        .from('child_activity')
-        .upsert(activity.toJson());
+    await _supabase.from('child_activity').upsert(activity.toJson());
   }
 
   /// Sync all usage stats from device to database
@@ -123,7 +123,9 @@ class DatabaseService {
       for (var l in limits) {
         categoryLimitsMap[l.category] = l.dailyLimitMinutes;
       }
-    } catch(e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
 
     // Calculate total usage per category from the CURRENT sync payload, respecting manual overrides
     Map<String, int> categoryUsage = {};
@@ -131,38 +133,42 @@ class DatabaseService {
       final packageName = app['packageName'] as String;
       final nativeCategory = (app['app_category'] as String?) ?? 'other';
       final minutesUsed = (app['minutesUsed'] as int?) ?? 0;
-      
+
       // Check for manual override
       final existingActivity = existingActivityMap[packageName];
       final manualCategory = existingActivity?.manualCategory;
-      final effectiveCategory = manualCategory?.isNotEmpty == true ? manualCategory! : nativeCategory;
-      
-      categoryUsage[effectiveCategory] = (categoryUsage[effectiveCategory] ?? 0) + minutesUsed;
+      final effectiveCategory = manualCategory?.isNotEmpty == true
+          ? manualCategory!
+          : nativeCategory;
+
+      categoryUsage[effectiveCategory] =
+          (categoryUsage[effectiveCategory] ?? 0) + minutesUsed;
     }
 
-    // Use a Map to deduplicate by package name (keeps the last occurrence)
-    final recordsMap = <String, Map<String, dynamic>>{};
-    
     // Track which apps we have updated from native stats
     final updatedPackageNames = <String>{};
-    
+
     // 3. Prepare Batch Payload
     List<Map<String, dynamic>> batchPayload = [];
     int skippedCount = 0;
 
     // Helper to check for changes
     bool hasChanged(Map<String, dynamic> newRecord, ChildActivity? existing) {
-      if (existing == null) return true; // New record
-      
+      if (existing == null) {
+        return true; // New record
+      }
+
       // Check for meaningful changes
       if (newRecord['minutes_used'] != existing.minutesUsed) return true;
-      if (newRecord['daily_limit_minutes'] != existing.dailyLimitMinutes) return true;
+      if (newRecord['daily_limit_minutes'] != existing.dailyLimitMinutes) {
+        return true;
+      }
       if (newRecord['is_blocked'] != existing.isBlocked) return true;
       if (newRecord['app_display_name'] != existing.appDisplayName) return true;
       if (newRecord['category'] != existing.category) return true;
       if (newRecord['manual_category'] != existing.manualCategory) return true;
-      
-      return false; 
+
+      return false;
     }
 
     // Process active usage from native
@@ -171,30 +177,36 @@ class DatabaseService {
       final displayName = app['displayName'] as String;
       final minutesUsed = app['minutesUsed'] as int;
       final category = (app['app_category'] as String?) ?? 'other';
-      
+
       // Skip system apps
-      if (packageName.startsWith('com.android.') || 
+      if (packageName.startsWith('com.android.') ||
           packageName == 'com.google.android.gms' ||
-          packageName == 'com.google.android.gsf' || 
+          packageName == 'com.google.android.gsf' ||
           packageName == 'com.google.android.packageinstaller') {
         continue;
       }
 
       final existingActivity = existingActivityMap[packageName];
       var limit = existingActivity?.dailyLimitMinutes ?? 1440;
-      
-      if (existingActivity != null && limit == 0 && !existingActivity.isBlocked) {
+
+      if (existingActivity != null &&
+          limit == 0 &&
+          !existingActivity.isBlocked) {
         limit = 1440;
       }
-      
+
       final manualCategory = existingActivity?.manualCategory;
-      final effectiveCategory = manualCategory?.isNotEmpty == true ? manualCategory! : category;
-      
-      final isAppLimitBlocked = limit == 0 || (limit > 0 && minutesUsed >= limit);
+      final effectiveCategory = manualCategory?.isNotEmpty == true
+          ? manualCategory!
+          : category;
+
+      final isAppLimitBlocked =
+          limit == 0 || (limit > 0 && minutesUsed >= limit);
       final catLimit = categoryLimitsMap[effectiveCategory];
       final currentCategoryTotal = categoryUsage[effectiveCategory] ?? 0;
-      final isCategoryBlocked = catLimit != null && currentCategoryTotal >= catLimit;
-      
+      final isCategoryBlocked =
+          catLimit != null && currentCategoryTotal >= catLimit;
+
       final isBlocked = isAppLimitBlocked || isCategoryBlocked;
 
       final record = {
@@ -214,7 +226,7 @@ class DatabaseService {
       } else {
         skippedCount++;
       }
-      
+
       updatedPackageNames.add(packageName);
     }
 
@@ -223,19 +235,19 @@ class DatabaseService {
     for (var activity in existingActivitiesList) {
       if (!updatedPackageNames.contains(activity.appPackageName)) {
         final isBlocked = activity.dailyLimitMinutes == 0;
-        
+
         final record = {
           'child_id': childId,
           'app_package_name': activity.appPackageName,
           'app_display_name': activity.appDisplayName,
           'daily_limit_minutes': activity.dailyLimitMinutes,
           'minutes_used': 0,
-          'is_blocked': isBlocked, 
+          'is_blocked': isBlocked,
           'last_updated': DateTime.now().toIso8601String(),
           'category': activity.category,
           'manual_category': activity.manualCategory,
         };
-        
+
         if (hasChanged(record, activity)) {
           batchPayload.add(record);
         } else {
@@ -245,17 +257,21 @@ class DatabaseService {
     }
 
     if (batchPayload.isEmpty) {
-      debugPrint('syncAllUsageStats: No changes to sync. Skipped $skippedCount records.');
+      debugPrint(
+        'syncAllUsageStats: No changes to sync. Skipped $skippedCount records.',
+      );
       return;
     }
 
     // execute RPC
     try {
       await _supabase.rpc(
-        'bulk_upsert_child_activity', 
+        'bulk_upsert_child_activity',
         params: {'p_records': batchPayload},
       );
-      debugPrint('syncAllUsageStats: Batched sync successful. Updated ${batchPayload.length}, Skipped $skippedCount');
+      debugPrint(
+        'syncAllUsageStats: Batched sync successful. Updated ${batchPayload.length}, Skipped $skippedCount',
+      );
     } catch (e) {
       debugPrint('syncAllUsageStats: Batch sync failed: $e');
       // Fallback to individual upserts if RPC fails (e.g. function not found yet)
@@ -264,28 +280,18 @@ class DatabaseService {
     }
   }
 
-  /// Format package name to display name
-  String _formatAppName(String packageName) {
-    // Extract app name from package (e.g., com.youtube.android -> YouTube)
-    final parts = packageName.split('.');
-    if (parts.length > 1) {
-      final name = parts[parts.length - 1];
-      if (name == 'android' && parts.length > 2) {
-        return parts[parts.length - 2].capitalize();
-      }
-      return name.capitalize();
-    }
-    return packageName;
-  }
-
   /// Update minutes used for an app
   Future<void> updateMinutesUsed({
     required String childId,
     required String appPackageName,
     required int minutesUsed,
   }) async {
-    final isBlocked = await _checkIfShouldBlock(childId, appPackageName, minutesUsed);
-    
+    final isBlocked = await _checkIfShouldBlock(
+      childId,
+      appPackageName,
+      minutesUsed,
+    );
+
     await _supabase
         .from('child_activity')
         .update({
@@ -299,8 +305,8 @@ class DatabaseService {
 
   /// Check if app should be blocked based on limit
   Future<bool> _checkIfShouldBlock(
-    String childId, 
-    String appPackageName, 
+    String childId,
+    String appPackageName,
     int minutesUsed,
   ) async {
     final response = await _supabase
@@ -324,10 +330,10 @@ class DatabaseService {
   }) async {
     // Calculate blocked status upfront
     // If limit is 0, we block immediately.
-    // If limit > 0, we need to check current usage... but to be safe/consistent, 
+    // If limit > 0, we need to check current usage... but to be safe/consistent,
     // we let usage sync handle the time-based block, unless we can check usage right now.
     // For manual block (0), we set is_blocked = true.
-    
+
     final isBlocked = dailyLimitMinutes == 0;
 
     // Try to update first (for existing entries)
@@ -344,17 +350,15 @@ class DatabaseService {
 
     // If no rows were updated, insert a new entry
     if ((updateResult as List).isEmpty) {
-      await _supabase
-          .from('child_activity')
-          .insert({
-            'child_id': childId,
-            'app_package_name': appPackageName,
-            'app_display_name': appDisplayName,
-            'daily_limit_minutes': dailyLimitMinutes,
-            'minutes_used': 0,
-            'is_blocked': isBlocked,
-            'last_updated': DateTime.now().toIso8601String(),
-          });
+      await _supabase.from('child_activity').insert({
+        'child_id': childId,
+        'app_package_name': appPackageName,
+        'app_display_name': appDisplayName,
+        'daily_limit_minutes': dailyLimitMinutes,
+        'minutes_used': 0,
+        'is_blocked': isBlocked,
+        'last_updated': DateTime.now().toIso8601String(),
+      });
     }
   }
 
@@ -365,11 +369,11 @@ class DatabaseService {
     // Postgres doesn't easily support "set is_blocked = (daily_limit_minutes == 0)" in a simple update without raw SQL or function.
     // For simplicity efficiently, we can fetch all, modify, and upsert, OR use a raw query if possible.
     // Given the constraints and typical 50 apps, fetch/update is safe.
-    
+
     final activities = await getChildActivities(childId);
     for (var a in activities) {
       final shouldStayBlocked = a.dailyLimitMinutes == 0;
-      
+
       await _supabase
           .from('child_activity')
           .update({
@@ -391,8 +395,10 @@ class DatabaseService {
           // Block if limit is 0 (manual block or time out)
           if (a.dailyLimitMinutes == 0) return true;
           // Block if usage exceeds limit (and limit is set)
-          if (a.dailyLimitMinutes > 0 && a.minutesUsed >= a.dailyLimitMinutes) return true;
-          
+          if (a.dailyLimitMinutes > 0 && a.minutesUsed >= a.dailyLimitMinutes) {
+            return true;
+          }
+
           return false;
         })
         .map((a) => a.appPackageName)
@@ -415,9 +421,7 @@ class DatabaseService {
 
   /// Add or update a category limit
   Future<void> upsertCategoryLimit(CategoryLimit limit) async {
-    await _supabase
-        .from('category_limits')
-        .upsert(limit.toJson());
+    await _supabase.from('category_limits').upsert(limit.toJson());
   }
 
   /// Delete a category limit (unlimited)
@@ -489,7 +493,10 @@ class DatabaseService {
   // ==================== USAGE REPORTS ====================
 
   /// Get daily usage summary for a specific date
-  Future<Map<String, dynamic>?> getDailySummary(String childId, DateTime date) async {
+  Future<Map<String, dynamic>?> getDailySummary(
+    String childId,
+    DateTime date,
+  ) async {
     try {
       final dateStr = date.toIso8601String().split('T')[0];
       final response = await _supabase
@@ -526,12 +533,15 @@ class DatabaseService {
   Future<void> generateDailySummary(String childId) async {
     // Get today's activities
     final activities = await getChildActivities(childId);
-    
+
     if (activities.isEmpty) return;
 
     // Calculate totals
-    final totalMinutes = activities.fold<int>(0, (sum, a) => sum + a.minutesUsed);
-    
+    final totalMinutes = activities.fold<int>(
+      0,
+      (sum, a) => sum + a.minutesUsed,
+    );
+
     // Build app breakdown
     final appBreakdown = <String, int>{};
     for (final activity in activities) {
@@ -566,15 +576,18 @@ class DatabaseService {
   /// Get aggregated stats for parent dashboard
   Future<Map<String, dynamic>> getChildStats(String childId) async {
     final activities = await getChildActivities(childId);
-    
-    final totalMinutes = activities.fold<int>(0, (sum, a) => sum + a.minutesUsed);
+
+    final totalMinutes = activities.fold<int>(
+      0,
+      (sum, a) => sum + a.minutesUsed,
+    );
     final blockedCount = activities.where((a) => a.isBlocked).length;
     final activeCount = activities.where((a) => !a.isBlocked).length;
 
     // Get weekly trend
     final weeklyData = await getUsageTrend(childId, days: 7);
     final weeklyTotal = weeklyData.fold<int>(
-      0, 
+      0,
       (sum, d) => sum + (d['total_minutes'] as int? ?? 0),
     );
 

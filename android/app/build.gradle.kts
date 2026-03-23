@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,6 +7,40 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use(keystoreProperties::load)
+}
+
+fun releaseSigningValue(propertyKey: String, envKey: String): String? {
+    return (keystoreProperties.getProperty(propertyKey) ?: System.getenv(envKey))
+        ?.takeIf { it.isNotBlank() }
+}
+
+val releaseStoreFile = releaseSigningValue(
+    propertyKey = "storeFile",
+    envKey = "PARENTLOCK_UPLOAD_STORE_FILE",
+)
+val releaseStorePassword = releaseSigningValue(
+    propertyKey = "storePassword",
+    envKey = "PARENTLOCK_UPLOAD_STORE_PASSWORD",
+)
+val releaseKeyAlias = releaseSigningValue(
+    propertyKey = "keyAlias",
+    envKey = "PARENTLOCK_UPLOAD_KEY_ALIAS",
+)
+val releaseKeyPassword = releaseSigningValue(
+    propertyKey = "keyPassword",
+    envKey = "PARENTLOCK_UPLOAD_KEY_PASSWORD",
+)
+
+val hasReleaseSigning =
+    !releaseStoreFile.isNullOrBlank() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.parentlock.parentlock"
@@ -22,21 +58,40 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.parentlock.parentlock"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    packaging {
+        jniLibs {
+            // Keep symbols in release artifacts so local toolchain quirks do not
+            // fail the bundle step while stripping third-party native libraries.
+            keepDebugSymbols += "**/*.so"
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigning) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig =
+                if (hasReleaseSigning) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
     }
 }

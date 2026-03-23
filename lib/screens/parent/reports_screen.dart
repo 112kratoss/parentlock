@@ -1,5 +1,5 @@
 /// Reports Screen
-/// 
+///
 /// Parent view showing activity reports with charts and usage trends.
 library;
 
@@ -13,11 +13,7 @@ class ReportsScreen extends StatefulWidget {
   final String childId;
   final String? childName;
 
-  const ReportsScreen({
-    super.key,
-    required this.childId,
-    this.childName,
-  });
+  const ReportsScreen({super.key, required this.childId, this.childName});
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
@@ -43,7 +39,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     try {
       final days = _period == 'today' ? 1 : (_period == 'week' ? 7 : 30);
-      
+
       final [stats, activities, trend] = await Future.wait([
         _databaseService.getChildStats(widget.childId),
         _databaseService.getChildActivities(widget.childId),
@@ -57,9 +53,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading reports: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading reports: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -74,10 +70,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
       ),
       body: _isLoading
@@ -138,9 +131,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             Text(
               '📊 Top Apps Chart',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -213,14 +206,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           if (value == 0) return const SizedBox();
                           final hours = value / 60;
                           return Text(
-                            hours >= 1 ? '${hours.toStringAsFixed(1)}h' : '${value.toInt()}m',
+                            hours >= 1
+                                ? '${hours.toStringAsFixed(1)}h'
+                                : '${value.toInt()}m',
                             style: const TextStyle(fontSize: 10),
                           );
                         },
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   borderData: FlBorderData(show: false),
                   gridData: FlGridData(
@@ -228,7 +227,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     drawVerticalLine: false,
                     horizontalInterval: 30,
                     getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.withOpacity(0.2),
+                      color: Colors.grey.withValues(alpha: 0.2),
                       strokeWidth: 1,
                     ),
                   ),
@@ -242,7 +241,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           toY: app.minutesUsed.toDouble(),
                           color: _getRankColor(index + 1),
                           width: 20,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
                         ),
                       ],
                     );
@@ -317,9 +318,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             Text(
               '📈 Usage Trend',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -351,7 +352,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 if (index < 0 || index >= _trendData.length) {
                                   return const SizedBox();
                                 }
-                                final date = DateTime.parse(_trendData[index]['date']);
+                                final date = DateTime.parse(
+                                  _trendData[index]['date'],
+                                );
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 8),
                                   child: Text(
@@ -371,14 +374,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 if (value == 0) return const SizedBox();
                                 final hours = value / 60;
                                 return Text(
-                                  hours >= 1 ? '${hours.toStringAsFixed(1)}h' : '${value.toInt()}m',
+                                  hours >= 1
+                                      ? '${hours.toStringAsFixed(1)}h'
+                                      : '${value.toInt()}m',
                                   style: const TextStyle(fontSize: 10),
                                 );
                               },
                             ),
                           ),
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
                         ),
                         borderData: FlBorderData(show: false),
                         gridData: FlGridData(
@@ -395,7 +404,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 toY: minutes.toDouble(),
                                 color: Theme.of(context).colorScheme.primary,
                                 width: 20,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(4),
+                                ),
                               ),
                             ],
                           );
@@ -439,9 +450,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             Text(
               '📊 Usage by Category',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             ...sortedCategories.map((entry) {
@@ -468,7 +479,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     const SizedBox(height: 4),
                     LinearProgressIndicator(
                       value: percent,
-                      backgroundColor: color.withOpacity(0.2),
+                      backgroundColor: color.withValues(alpha: 0.2),
                       valueColor: AlwaysStoppedAnimation(color),
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(4),
@@ -498,9 +509,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             Text(
               '📱 Top Apps',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             ...topApps.asMap().entries.map((entry) {
@@ -617,10 +628,7 @@ class _SummaryCard extends StatelessWidget {
             ),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
             ),
           ],
         ),

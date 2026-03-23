@@ -1,5 +1,5 @@
 /// Schedule Service
-/// 
+///
 /// Manages screen time schedules (bedtime, homework, allowed hours).
 /// Checks if device should be locked based on active schedules.
 library;
@@ -10,7 +10,7 @@ import '../models/schedule.dart';
 
 class ScheduleService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  
+
   Timer? _checkTimer;
   String? _currentChildId;
   void Function(Schedule?)? _onScheduleChange;
@@ -37,9 +37,7 @@ class ScheduleService {
         .eq('child_id', childId)
         .order('created_at');
 
-    return (response as List)
-        .map((json) => Schedule.fromJson(json))
-        .toList();
+    return (response as List).map((json) => Schedule.fromJson(json)).toList();
   }
 
   /// Get schedules created by a parent
@@ -50,9 +48,7 @@ class ScheduleService {
         .eq('parent_id', parentId)
         .order('created_at');
 
-    return (response as List)
-        .map((json) => Schedule.fromJson(json))
-        .toList();
+    return (response as List).map((json) => Schedule.fromJson(json)).toList();
   }
 
   /// Update a schedule
@@ -130,8 +126,8 @@ class ScheduleService {
       if (blockedCategories.isEmpty) return false;
 
       // Simple category detection based on package name
-      final category = _detectAppCategory(packageName);
-      return blockedCategories.contains(category);
+      final category = _normalizeCategory(_detectAppCategory(packageName));
+      return blockedCategories.map(_normalizeCategory).contains(category);
     }
 
     return false;
@@ -142,8 +138,8 @@ class ScheduleService {
     final lower = packageName.toLowerCase();
 
     // Games
-    if (lower.contains('game') || 
-        lower.contains('roblox') || 
+    if (lower.contains('game') ||
+        lower.contains('roblox') ||
         lower.contains('minecraft') ||
         lower.contains('supercell') ||
         lower.contains('com.king')) {
@@ -180,6 +176,16 @@ class ScheduleService {
     }
 
     return 'other';
+  }
+
+  String _normalizeCategory(String category) {
+    switch (category.toLowerCase()) {
+      case 'games':
+      case 'game':
+        return 'game';
+      default:
+        return category.toLowerCase();
+    }
   }
 
   // ==================== REAL-TIME MONITORING ====================
@@ -228,7 +234,7 @@ class ScheduleService {
   /// Get information for display on lock screen
   LockScreenInfo? getLockScreenInfo(Schedule schedule) {
     final now = DateTime.now();
-    
+
     // Calculate when schedule ends
     final endMinutes = schedule.endTime.hour * 60 + schedule.endTime.minute;
     final currentMinutes = now.hour * 60 + now.minute;
@@ -237,15 +243,21 @@ class ScheduleService {
     if (endMinutes > currentMinutes) {
       // Ends today
       unlockTime = DateTime(
-        now.year, now.month, now.day,
-        schedule.endTime.hour, schedule.endTime.minute,
+        now.year,
+        now.month,
+        now.day,
+        schedule.endTime.hour,
+        schedule.endTime.minute,
       );
     } else {
       // Ends tomorrow (overnight schedule)
       final tomorrow = now.add(const Duration(days: 1));
       unlockTime = DateTime(
-        tomorrow.year, tomorrow.month, tomorrow.day,
-        schedule.endTime.hour, schedule.endTime.minute,
+        tomorrow.year,
+        tomorrow.month,
+        tomorrow.day,
+        schedule.endTime.hour,
+        schedule.endTime.minute,
       );
     }
 

@@ -8,11 +8,44 @@
 library;
 
 import 'package:flutter/services.dart';
+import '../models/native_platform_status.dart';
 
 class NativeService {
   static const MethodChannel _channel = MethodChannel(
     'com.parentlock.parentlock/native',
   );
+
+  Future<NativePlatformStatus> getPlatformStatus() async {
+    try {
+      final result = await _channel.invokeMethod('getPlatformStatus');
+      if (result is Map) {
+        return NativePlatformStatus.fromJson(
+          Map<String, dynamic>.from(
+            result.map((key, value) => MapEntry(key.toString(), value)),
+          ),
+        );
+      }
+    } on PlatformException {
+      // Fall through to a safe default.
+    }
+
+    return const NativePlatformStatus(
+      platform: 'unknown',
+      monitoringSupported: false,
+      monitoringActive: false,
+      usageStatsSupported: false,
+      usageStatsGranted: false,
+      appBlockingSupported: false,
+      overlayPermissionRequired: false,
+      overlayGranted: false,
+      batteryOptimizationSupported: false,
+      batteryOptimizationExempt: true,
+      familyControlsSupported: false,
+      familyControlsAuthorized: false,
+      notificationsGranted: false,
+      backgroundLocationSupported: true,
+    );
+  }
 
   /// Get usage statistics from the native platform
   ///
@@ -39,6 +72,9 @@ class NativeService {
       // Fallback for other formats
       return Map<String, int>.from(result as Map);
     } on PlatformException catch (e) {
+      if (e.code == 'UNSUPPORTED') {
+        return {};
+      }
       throw Exception('Failed to get usage stats: ${e.message}');
     }
   }
@@ -68,6 +104,9 @@ class NativeService {
       }
       return [];
     } on PlatformException catch (e) {
+      if (e.code == 'UNSUPPORTED') {
+        return [];
+      }
       throw Exception('Failed to get usage stats: ${e.message}');
     }
   }
@@ -81,6 +120,12 @@ class NativeService {
         'blockedApps': blockedApps,
       });
     } on PlatformException catch (e) {
+      if (e.code == 'UNSUPPORTED') {
+        throw Exception(
+          'Monitoring is not supported on this device yet. '
+          'Finish the iOS Screen Time setup in Xcode to enable it.',
+        );
+      }
       throw Exception('Failed to start monitoring: ${e.message}');
     }
   }
@@ -99,44 +144,27 @@ class NativeService {
   /// Android: PACKAGE_USAGE_STATS, SYSTEM_ALERT_WINDOW
   /// iOS: Screen Time authorization
   Future<bool> checkPermissions() async {
-    final status = await getPermissionStatus();
-    return status['usageStats'] == true && status['overlay'] == true;
+    final status = await getPlatformStatus();
+    if (status.monitoringSupported) {
+      return status.usageStatsGranted &&
+          (!status.overlayPermissionRequired || status.overlayGranted);
+    }
+    if (status.familyControlsSupported) {
+      return status.familyControlsAuthorized;
+    }
+    return false;
   }
 
   /// Get detailed permission status
   Future<Map<String, bool>> getPermissionStatus() async {
-    try {
-      final result = await _channel.invokeMethod('checkPermissions');
-      if (result is Map) {
-        return Map<String, bool>.from(
-          result.map((key, value) => MapEntry(key.toString(), value as bool)),
-        );
-      }
-      return {
-        'usageStats': result as bool? ?? false,
-        'overlay': result as bool? ?? false,
-        'batteryOptimization': false,
-      };
-    } on PlatformException {
-      return {
-        'usageStats': false,
-        'overlay': false,
-        'batteryOptimization': false,
-      };
-    }
+    final status = await getPlatformStatus();
+    return status.toPermissionMap();
   }
 
   /// Check if battery optimization is ignored
   Future<bool> checkBatteryOptimization() async {
-    try {
-      final result = await _channel.invokeMethod('checkPermissions');
-      if (result is Map) {
-        return result['batteryOptimization'] as bool? ?? false;
-      }
-      return false;
-    } on PlatformException {
-      return false;
-    }
+    final status = await getPlatformStatus();
+    return status.batteryOptimizationExempt;
   }
 
   /// Request required permissions
@@ -215,7 +243,10 @@ class NativeService {
     try {
       final result = await _channel.invokeMethod('getCurrentForegroundApp');
       return result as String?;
-    } on PlatformException {
+    } on PlatformException catch (e) {
+      if (e.code == 'UNSUPPORTED') {
+        return null;
+      }
       return null;
     }
   }

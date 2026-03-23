@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../services/database_service.dart';
 import '../../models/category_limit.dart';
-import '../../models/child_activity.dart';
 
 class CategoryLimitsScreen extends StatefulWidget {
   final String childId;
   final String childName;
 
   const CategoryLimitsScreen({
-    Key? key,
+    super.key,
     required this.childId,
     required this.childName,
-  }) : super(key: key);
+  });
 
   @override
   State<CategoryLimitsScreen> createState() => _CategoryLimitsScreenState();
@@ -22,7 +21,7 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
   bool _isLoading = true;
   List<CategoryLimit> _limits = [];
   Map<String, int> _usage = {}; // Category -> Minutes used today
-  
+
   // Standard Android categories
   final List<String> _categories = [
     'social',
@@ -47,9 +46,11 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
     try {
       // 1. Fetch current limits
       final limits = await _databaseService.getCategoryLimits(widget.childId);
-      
+
       // 2. Fetch usage to calculate today's category totals
-      final activities = await _databaseService.getChildActivities(widget.childId);
+      final activities = await _databaseService.getChildActivities(
+        widget.childId,
+      );
       final usageMap = <String, int>{};
       for (var a in activities) {
         final cat = a.category.isEmpty ? 'other' : a.category;
@@ -65,9 +66,9 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading limits: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading limits: $e')));
         setState(() => _isLoading = false);
       }
     }
@@ -89,19 +90,19 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
         );
         await _databaseService.upsertCategoryLimit(limit);
       }
-      
+
       await _loadData(); // Refresh
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Limit updated')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Limit updated')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating limit: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error updating limit: $e')));
       }
     }
   }
@@ -113,15 +114,24 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
 
   IconData _getCategoryIcon(String category) {
     switch (category) {
-      case 'game': return Icons.games;
-      case 'social': return Icons.people;
-      case 'video': return Icons.video_library;
-      case 'audio': return Icons.audiotrack;
-      case 'image': return Icons.image;
-      case 'productivity': return Icons.work;
-      case 'news': return Icons.newspaper;
-      case 'maps': return Icons.map;
-      default: return Icons.category;
+      case 'game':
+        return Icons.games;
+      case 'social':
+        return Icons.people;
+      case 'video':
+        return Icons.video_library;
+      case 'audio':
+        return Icons.audiotrack;
+      case 'image':
+        return Icons.image;
+      case 'productivity':
+        return Icons.work;
+      case 'news':
+        return Icons.newspaper;
+      case 'maps':
+        return Icons.map;
+      default:
+        return Icons.category;
     }
   }
 
@@ -129,7 +139,7 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
     final controller = TextEditingController(
       text: currentLimit?.toString() ?? '',
     );
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -137,17 +147,19 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             const Text('Enter daily limit in minutes (or leave empty for unlimited).'),
-             const SizedBox(height: 16),
-             TextField(
-               controller: controller,
-               keyboardType: TextInputType.number,
-               decoration: const InputDecoration(
-                 labelText: 'Minutes',
-                 border: OutlineInputBorder(),
-                 suffixText: 'min',
-               ),
-             ),
+            const Text(
+              'Enter daily limit in minutes (or leave empty for unlimited).',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Minutes',
+                border: OutlineInputBorder(),
+                suffixText: 'min',
+              ),
+            ),
           ],
         ),
         actions: [
@@ -178,34 +190,46 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.childName} - Category Limits'),
-      ),
+      appBar: AppBar(title: Text('${widget.childName} - Category Limits')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
               itemCount: _categories.length,
               itemBuilder: (context, index) {
                 final category = _categories[index];
-                
+
                 // Find existing limit
                 final limitObj = _limits.firstWhere(
-                  (l) => l.category == category, 
+                  (l) => l.category == category,
                   orElse: () => CategoryLimit(
-                    id: '', childId: '', category: '', dailyLimitMinutes: -1, lastUpdated: DateTime.now()
-                  )
+                    id: '',
+                    childId: '',
+                    category: '',
+                    dailyLimitMinutes: -1,
+                    lastUpdated: DateTime.now(),
+                  ),
                 );
                 final hasLimit = limitObj.dailyLimitMinutes != -1;
-                final limitMinutes = hasLimit ? limitObj.dailyLimitMinutes : null;
-                
+                final limitMinutes = hasLimit
+                    ? limitObj.dailyLimitMinutes
+                    : null;
+
                 final usage = _usage[category] ?? 0;
-                
+
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                      child: Icon(_getCategoryIcon(category), color: Theme.of(context).primaryColor),
+                      backgroundColor: Theme.of(
+                        context,
+                      ).primaryColor.withValues(alpha: 0.1),
+                      child: Icon(
+                        _getCategoryIcon(category),
+                        color: Theme.of(context).primaryColor,
+                      ),
                     ),
                     title: Text(_formatCategory(category)),
                     subtitle: Column(
@@ -216,7 +240,9 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
                           Text(
                             'Limit: ${limitMinutes}m',
                             style: TextStyle(
-                              color: usage >= limitMinutes! ? Colors.red : Colors.green,
+                              color: usage >= limitMinutes!
+                                  ? Colors.red
+                                  : Colors.green,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -225,7 +251,8 @@ class _CategoryLimitsScreenState extends State<CategoryLimitsScreen> {
                     trailing: hasLimit
                         ? IconButton(
                             icon: const Icon(Icons.edit),
-                            onPressed: () => _showLimitDialog(category, limitMinutes),
+                            onPressed: () =>
+                                _showLimitDialog(category, limitMinutes),
                           )
                         : OutlinedButton(
                             onPressed: () => _showLimitDialog(category, null),

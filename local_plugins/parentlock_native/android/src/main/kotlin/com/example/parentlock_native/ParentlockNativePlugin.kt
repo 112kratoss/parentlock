@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.app.AppOpsManager
+import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -21,20 +22,37 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.parentlock.parentlock/native")
         channel.setMethodCallHandler(this)
         context = flutterPluginBinding.applicationContext
+        BlockOverlayService.updateBlockedApps(MonitoringStateStore.getBlockedApps(context))
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
             "getUsageStats" -> {
-                val stats = UsageStatsService.getUsageStats(context)
-                result.success(stats)
+                // Offload to background thread to prevent UI blocking
+                Thread {
+                    val stats = UsageStatsService.getUsageStats(context)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            result.success(stats)
+                        } catch (e: Exception) {
+                            // Channel might be closed
+                        }
+                    }
+                }.start()
+            }
+            "getPlatformStatus" -> {
+                result.success(getPlatformStatus())
             }
             "startMonitoringService" -> {
                 val blockedApps = call.argument<List<String>>("blockedApps") ?: emptyList()
+                MonitoringStateStore.setMonitoringEnabled(context, true)
+                MonitoringStateStore.saveBlockedApps(context, blockedApps)
+                BlockOverlayService.updateBlockedApps(blockedApps)
                 MonitoringService.start(context, blockedApps)
                 result.success(true)
             }
             "stopMonitoringService" -> {
+                MonitoringStateStore.setMonitoringEnabled(context, false)
                 MonitoringService.stop(context)
                 result.success(true)
             }
@@ -72,6 +90,7 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
                 val packageName = call.argument<String>("packageName")
                 if (packageName != null) {
                     BlockOverlayService.addBlockedApp(packageName)
+                    MonitoringStateStore.saveBlockedApps(context, BlockOverlayService.getBlockedApps())
                     result.success(true)
                 } else {
                     result.error("INVALID_ARGUMENT", "Package name is required", null)
@@ -81,6 +100,7 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
                 val packageName = call.argument<String>("packageName")
                 if (packageName != null) {
                     BlockOverlayService.removeBlockedApp(packageName)
+                    MonitoringStateStore.saveBlockedApps(context, BlockOverlayService.getBlockedApps())
                     result.success(true)
                 } else {
                     result.error("INVALID_ARGUMENT", "Package name is required", null)
@@ -89,11 +109,20 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
             "updateBlockedApps" -> {
                 val blockedApps = call.argument<List<String>>("blockedApps") ?: emptyList()
                 BlockOverlayService.updateBlockedApps(blockedApps)
+                MonitoringStateStore.saveBlockedApps(context, blockedApps)
                 result.success(true)
             }
             "getCurrentForegroundApp" -> {
-                val app = UsageStatsService.getCurrentForegroundApp(context)
-                result.success(app)
+                // Also offload this as it queries usage stats
+                Thread {
+                    val app = UsageStatsService.getCurrentForegroundApp(context)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                         try {
+                            result.success(app)
+                        } catch (e: Exception) {
+                        }
+                    }
+                }.start()
             }
             else -> {
                 result.notImplemented()
@@ -172,5 +201,24 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         }
+    }
+
+    private fun getPlatformStatus(): Map<String, Any> {
+        return mapOf(
+            "platform" to "android",
+            "monitoringSupported" to true,
+            "monitoringActive" to MonitoringService.isRunning(),
+            "usageStatsSupported" to true,
+            "usageStatsGranted" to hasUsageStatsPermission(),
+            "appBlockingSupported" to true,
+            "overlayPermissionRequired" to true,
+            "overlayGranted" to hasOverlayPermission(),
+            "batteryOptimizationSupported" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M),
+            "batteryOptimizationExempt" to isIgnoringBatteryOptimizations(),
+            "familyControlsSupported" to false,
+            "familyControlsAuthorized" to false,
+            "notificationsGranted" to NotificationManagerCompat.from(context).areNotificationsEnabled(),
+            "backgroundLocationSupported" to true
+        )
     }
 }

@@ -1,5 +1,5 @@
 /// Child Apps Screen
-/// 
+///
 /// Lists all installed/monitored apps for a child and allows management.
 library;
 
@@ -43,14 +43,14 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
   Future<void> _refreshActivities() async {
     try {
       if (widget.children.isEmpty) return;
-      
+
       // Fetch for all linked children
       // We can use the existing parent fetch method from database service
       // assuming we have the parent ID (current user)
       final active = await _databaseService.getParentChildrenActivities(
-        _databaseService.supabase.auth.currentUser!.id
+        _databaseService.supabase.auth.currentUser!.id,
       );
-      
+
       if (mounted) {
         setState(() {
           _activities = active;
@@ -65,8 +65,10 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
     setState(() => _isLoading = true);
     try {
       final isCurrentlyBlocked = activity.isEffectivelyBlocked;
-      final newLimit = isCurrentlyBlocked ? 1440 : 0; // Unblock to unlimited, or Block (0)
-      
+      final newLimit = isCurrentlyBlocked
+          ? 1440
+          : 0; // Unblock to unlimited, or Block (0)
+
       // Update local state first
       setState(() {
         final index = _activities.indexWhere((a) => a.id == activity.id);
@@ -77,18 +79,20 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
           );
         }
       });
-      
+
       await _databaseService.setAppLimit(
         childId: activity.childId,
         appPackageName: activity.appPackageName,
         appDisplayName: activity.appDisplayName,
         dailyLimitMinutes: newLimit,
       );
-
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating app: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error updating app: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       // Revert on error - logic omitted for brevity as typically we'd reload
@@ -139,7 +143,9 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                             ),
                           ),
                           Text(
-                            selectedLimit == 240 ? 'Unlimited (4h+)' : '$selectedLimit minutes per day',
+                            selectedLimit == 240
+                                ? 'Unlimited (4h+)'
+                                : '$selectedLimit minutes per day',
                             style: TextStyle(color: Colors.grey[600]),
                           ),
                         ],
@@ -171,11 +177,11 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                     TextButton(
+                    TextButton(
                       onPressed: () {
-                         // Set to "Unlimited" (1440 mins)
-                         _updateAppLimit(activity, 1440);
-                         Navigator.pop(context);
+                        // Set to "Unlimited" (1440 mins)
+                        _updateAppLimit(activity, 1440);
+                        Navigator.pop(context);
                       },
                       child: const Text('Remove Limit'),
                     ),
@@ -202,7 +208,7 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
     setState(() => _isLoading = true);
     try {
       // Optimistic update
-       setState(() {
+      setState(() {
         final index = _activities.indexWhere((a) => a.id == activity.id);
         if (index != -1) {
           // If limit is 0, it's blocked. If > 0, it depends on usage (handled by DB/Native)
@@ -219,8 +225,11 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
       );
     } catch (e) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error setting limit: $e'), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error setting limit: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -229,7 +238,17 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
   }
 
   Future<void> _showCategoryEditDialog(ChildActivity activity) async {
-    final categories = ['social', 'game', 'video', 'audio', 'productivity', 'image', 'maps', 'news', 'other'];
+    final categories = [
+      'social',
+      'game',
+      'video',
+      'audio',
+      'productivity',
+      'image',
+      'maps',
+      'news',
+      'other',
+    ];
     String? selectedCategory = activity.manualCategory ?? activity.category;
     if (!categories.contains(selectedCategory)) selectedCategory = 'other';
 
@@ -242,20 +261,30 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: categories.map((cat) {
-                  return RadioListTile<String>(
-                    title: Text(cat.capitalize()),
-                    value: cat,
-                    groupValue: selectedCategory,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: categories
+                        .map(
+                          (cat) => DropdownMenuItem<String>(
+                            value: cat,
+                            child: Text(cat.capitalize()),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (value) {
                       setDialogState(() => selectedCategory = value);
                     },
-                  );
-                }).toList(),
+                  ),
+                ],
               ),
             ),
             actions: [
-               TextButton(
+              TextButton(
                 onPressed: () {
                   // Reset to auto-detect
                   _updateAppCategory(activity, null);
@@ -269,8 +298,8 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
               ),
               ElevatedButton(
                 onPressed: () {
-                   _updateAppCategory(activity, selectedCategory);
-                   Navigator.pop(context);
+                  _updateAppCategory(activity, selectedCategory);
+                  Navigator.pop(context);
                 },
                 child: const Text('Save'),
               ),
@@ -281,17 +310,22 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
     );
   }
 
-  Future<void> _updateAppCategory(ChildActivity activity, String? manualCategory) async {
+  Future<void> _updateAppCategory(
+    ChildActivity activity,
+    String? manualCategory,
+  ) async {
     setState(() => _isLoading = true);
     try {
       // Optimistic update
       setState(() {
         final index = _activities.indexWhere((a) => a.id == activity.id);
         if (index != -1) {
-          _activities[index] = activity.copyWith(manualCategory: manualCategory);
+          _activities[index] = activity.copyWith(
+            manualCategory: manualCategory,
+          );
         }
       });
-      
+
       // Update DB
       await _databaseService.supabase
           .from('child_activity')
@@ -301,11 +335,13 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
           })
           .eq('child_id', activity.childId)
           .eq('app_package_name', activity.appPackageName);
-
     } catch (e) {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating category: $e'), backgroundColor: Colors.red),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating category: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       _refreshActivities();
@@ -323,8 +359,11 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: Icon(_showBlockedOnly ? Icons.filter_list_off : Icons.filter_list),
-            onPressed: () => setState(() => _showBlockedOnly = !_showBlockedOnly),
+            icon: Icon(
+              _showBlockedOnly ? Icons.filter_list_off : Icons.filter_list,
+            ),
+            onPressed: () =>
+                setState(() => _showBlockedOnly = !_showBlockedOnly),
             tooltip: _showBlockedOnly ? 'Show All Apps' : 'Show Blocked Only',
           ),
         ],
@@ -340,7 +379,7 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                     .where((a) => a.childId == child.id)
                     .where((a) => !_showBlockedOnly || a.isEffectivelyBlocked)
                     .toList();
-                
+
                 // Sort: Blocked first, then by name
                 childApps.sort((a, b) {
                   if (a.isEffectivelyBlocked != b.isEffectivelyBlocked) {
@@ -368,9 +407,8 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                               const SizedBox(width: 12),
                               Text(
                                 'Child Device (${child.id.substring(0, 4)}...)',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
@@ -383,7 +421,8 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => CategoryLimitsScreen(
                                     childId: child.id,
-                                    childName: 'Child Device', // Ideally pass real name
+                                    childName:
+                                        'Child Device', // Ideally pass real name
                                   ),
                                 ),
                               ).then((_) => _refreshActivities());
@@ -392,15 +431,19 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                         ],
                       ),
                     ),
-                    
+
                     if (childApps.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(16),
-                        child: Text('No usage data yet.', style: TextStyle(color: Colors.grey)),
+                        child: Text(
+                          'No usage data yet.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
                       )
                     else
                       ...childApps.map((app) {
-                        final categoryDisplay = app.effectiveCategory.capitalize();
+                        final categoryDisplay = app.effectiveCategory
+                            .capitalize();
                         final isOverridden = app.manualCategory != null;
 
                         return Container(
@@ -410,15 +453,15 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
+                                color: Colors.black.withValues(alpha: 0.05),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
                             ],
                             border: Border.all(
-                              color: app.isEffectivelyBlocked 
-                                  ? Colors.red.withOpacity(0.1) 
-                                  : Colors.transparent, 
+                              color: app.isEffectivelyBlocked
+                                  ? Colors.red.withValues(alpha: 0.1)
+                                  : Colors.transparent,
                               width: 1.5,
                             ),
                           ),
@@ -449,11 +492,12 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 16),
-                                    
+
                                     // App Details
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             app.appDisplayName,
@@ -477,27 +521,36 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                         ],
                                       ),
                                     ),
-                                    
+
                                     // Block Toggle
                                     IconButton.filledTonal(
-                                      onPressed: _isLoading ? null : () => _toggleBlock(app),
+                                      onPressed: _isLoading
+                                          ? null
+                                          : () => _toggleBlock(app),
                                       icon: Icon(
-                                        app.isEffectivelyBlocked ? Icons.lock : Icons.lock_open_rounded,
-                                        color: app.isEffectivelyBlocked ? Colors.red : Colors.green,
+                                        app.isEffectivelyBlocked
+                                            ? Icons.lock
+                                            : Icons.lock_open_rounded,
+                                        color: app.isEffectivelyBlocked
+                                            ? Colors.red
+                                            : Colors.green,
                                       ),
                                       style: IconButton.styleFrom(
-                                        backgroundColor: app.isEffectivelyBlocked 
-                                            ? Colors.red.shade50 
+                                        backgroundColor:
+                                            app.isEffectivelyBlocked
+                                            ? Colors.red.shade50
                                             : Colors.green.shade50,
                                       ),
-                                      tooltip: app.isEffectivelyBlocked ? 'Unblock' : 'Block',
+                                      tooltip: app.isEffectivelyBlocked
+                                          ? 'Unblock'
+                                          : 'Block',
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 16),
                                 const Divider(height: 1),
                                 const SizedBox(height: 12),
-                                
+
                                 // Action Row: Category & Usage/Limit
                                 Row(
                                   children: [
@@ -506,18 +559,30 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                       child: Align(
                                         alignment: Alignment.centerLeft,
                                         child: InkWell(
-                                          onTap: () => _showCategoryEditDialog(app),
-                                          borderRadius: BorderRadius.circular(20),
+                                          onTap: () =>
+                                              _showCategoryEditDialog(app),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 12, 
+                                              horizontal: 12,
                                               vertical: 6,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(20),
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                               border: isOverridden
-                                                  ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1)
+                                                  ? Border.all(
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.primary,
+                                                      width: 1,
+                                                    )
                                                   : null,
                                             ),
                                             child: Row(
@@ -526,19 +591,25 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                                 Icon(
                                                   Icons.category_outlined,
                                                   size: 14,
-                                                  color: Theme.of(context).colorScheme.primary,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary,
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Flexible(
                                                   child: Text(
                                                     categoryDisplay,
                                                     style: TextStyle(
-                                                      color: Theme.of(context).colorScheme.primary,
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.primary,
                                                       fontSize: 12,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                     maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
                                                 ),
                                                 if (isOverridden) ...[
@@ -546,7 +617,9 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                                   Icon(
                                                     Icons.edit,
                                                     size: 10,
-                                                    color: Theme.of(context).colorScheme.primary,
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary,
                                                   ),
                                                 ],
                                               ],
@@ -555,12 +628,13 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                         ),
                                       ),
                                     ),
-                                    
+
                                     // Usage & Limit
                                     Row(
                                       children: [
                                         Column(
-                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
                                           children: [
                                             Text(
                                               '${app.minutesUsed}m used',
@@ -570,9 +644,12 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                            if (app.dailyLimitMinutes > 0 && app.dailyLimitMinutes < 1440)
+                                            if (app.dailyLimitMinutes > 0 &&
+                                                app.dailyLimitMinutes < 1440)
                                               Padding(
-                                                padding: const EdgeInsets.only(top: 2),
+                                                padding: const EdgeInsets.only(
+                                                  top: 2,
+                                                ),
                                                 child: Text(
                                                   'Limit: ${app.dailyLimitMinutes}m',
                                                   style: const TextStyle(
@@ -586,12 +663,15 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
                                         const SizedBox(width: 8),
                                         InkWell(
                                           onTap: () => _showLimitDialog(app),
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           child: Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: Colors.grey[100],
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                             child: Icon(
                                               Icons.timer_outlined,
@@ -617,4 +697,3 @@ class _ChildAppsScreenState extends State<ChildAppsScreen> {
     );
   }
 }
-
