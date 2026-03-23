@@ -49,6 +49,12 @@ void main() {
             'platform': 'android',
             'monitoringSupported': true,
             'monitoringActive': true,
+            'enrollmentMode': 'managed_device',
+            'deviceOwner': true,
+            'tamperState': 'healthy',
+            'tamperReason': null,
+            'lastHeartbeatAt': '2026-03-23T00:00:00Z',
+            'criticalPermissionsOk': true,
             'usageStatsSupported': true,
             'usageStatsGranted': true,
             'appBlockingSupported': true,
@@ -72,6 +78,11 @@ void main() {
       expect(status.platform, 'android');
       expect(status.monitoringSupported, isTrue);
       expect(status.monitoringActive, isTrue);
+      expect(status.enrollmentMode, 'managed_device');
+      expect(status.deviceOwner, isTrue);
+      expect(status.tamperState, 'healthy');
+      expect(status.lastHeartbeatAt, DateTime.parse('2026-03-23T00:00:00Z'));
+      expect(status.criticalPermissionsOk, isTrue);
       expect(status.usageStatsGranted, isTrue);
       expect(status.notificationsGranted, isTrue);
       expect(status.batteryOptimizationExempt, isFalse);

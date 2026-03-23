@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/child_activity.dart';
+import '../../models/device_health.dart';
 import '../../models/parent_link_code.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
@@ -31,6 +32,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
 
   List<UserProfile> _children = [];
   List<ChildActivity> _activities = [];
+  Map<String, DeviceHealthStatus> _deviceHealthByChildId = {};
+  Map<String, List<DeviceHealthEvent>> _deviceHealthEventsByChildId = {};
   bool _isLoading = true;
   ParentLinkCode? _linkingCode;
 
@@ -38,6 +41,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   RealtimeChannel? _sosSubscription;
   final Map<String, RealtimeChannel> _geofenceSubscriptions = {};
   final Map<String, RealtimeChannel> _activitySubscriptions = {};
+  final Map<String, RealtimeChannel> _healthSubscriptions = {};
+  final Map<String, RealtimeChannel> _healthEventSubscriptions = {};
 
   @override
   void initState() {
@@ -56,6 +61,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     for (final sub in _activitySubscriptions.values) {
       sub.unsubscribe();
     }
+    for (final sub in _healthSubscriptions.values) {
+      sub.unsubscribe();
+    }
+    for (final sub in _healthEventSubscriptions.values) {
+      sub.unsubscribe();
+    }
     super.dispose();
   }
 
@@ -65,22 +76,33 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     try {
       final userId = _authService.currentUser?.id;
       if (userId != null) {
+        try {
+          await _databaseService.reconcileDeviceHealthStates();
+        } catch (_) {}
+
         final children = await _databaseService.getLinkedChildren(userId);
         final activities = await _databaseService.getParentChildrenActivities(
           userId,
         );
+        final childIds = children.map((child) => child.id).toList();
+        final healthByChild = await _databaseService.getDeviceHealthForChildren(
+          childIds,
+        );
+        final healthEventsByChild = await _databaseService
+            .getDeviceHealthEventsForChildren(childIds);
 
         setState(() {
           _children = children;
           _activities = activities;
+          _deviceHealthByChildId = healthByChild;
+          _deviceHealthEventsByChildId = healthEventsByChild;
         });
 
         // Set up real-time subscriptions for SOS and geofence
         _setupSosSubscription(userId);
-        // Set up real-time subscriptions for SOS and geofence
-        _setupSosSubscription(userId);
         _setupGeofenceSubscriptions(children);
         _setupActivitySubscriptions(children);
+        _setupHealthSubscriptions(children);
       }
     } catch (e) {
       if (mounted) {
@@ -99,9 +121,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     _sosSubscription = _locationService.subscribeToSosAlerts(
       parentId: parentId,
       onAlert: (alert) async {
-        // Find child name
-        final child = _children.where((c) => c.id == alert.childId).firstOrNull;
-        final childName = child != null ? 'Child' : 'Your child';
+        final childName = _childDisplayName(alert.childId);
 
         // Show high-priority notification
         await _notificationService.showSosAlert(
@@ -199,6 +219,69 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
             },
           );
     }
+  }
+
+  void _setupHealthSubscriptions(List<UserProfile> children) {
+    for (final sub in _healthSubscriptions.values) {
+      sub.unsubscribe();
+    }
+    for (final sub in _healthEventSubscriptions.values) {
+      sub.unsubscribe();
+    }
+    _healthSubscriptions.clear();
+    _healthEventSubscriptions.clear();
+
+    for (final child in children) {
+      _healthSubscriptions[child.id] = _databaseService.subscribeToDeviceHealth(
+        childId: child.id,
+        onUpdate: (healthStatus) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _deviceHealthByChildId[child.id] = healthStatus;
+          });
+        },
+      );
+
+      _healthEventSubscriptions[child.id] = _databaseService
+          .subscribeToDeviceHealthEvents(
+            childId: child.id,
+            onEvent: (event) async {
+              final childName = _childDisplayName(child.id);
+
+              if (mounted) {
+                setState(() {
+                  final existingEvents =
+                      _deviceHealthEventsByChildId[child.id] ?? [];
+                  _deviceHealthEventsByChildId[child.id] = [
+                    event,
+                    ...existingEvents,
+                  ].take(3).toList();
+                });
+              }
+
+              if (!event.isReminder &&
+                  (event.tamperState == DeviceTamperState.tampered ||
+                      event.tamperState == DeviceTamperState.offline)) {
+                await _notificationService.showDeviceHealthAlert(
+                  childName: childName,
+                  stateLabel: event.tamperState.name,
+                  reason: event.tamperReason,
+                );
+              }
+            },
+          );
+    }
+  }
+
+  String _childDisplayName(String childId) {
+    final index = _children.indexWhere((child) => child.id == childId);
+    if (index == -1) {
+      return 'Child device';
+    }
+    return 'Child ${index + 1}';
   }
 
   /// Show SOS alert dialog when app is in foreground
@@ -319,6 +402,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                           activities: _activities
                               .where((a) => a.childId == child.id)
                               .toList(),
+                          deviceHealth: _deviceHealthByChildId[child.id],
+                          healthEvents:
+                              _deviceHealthEventsByChildId[child.id] ??
+                              const [],
                         ),
                       ),
 
@@ -443,8 +530,15 @@ class _EmptyChildrenCard extends StatelessWidget {
 class _ChildCard extends StatelessWidget {
   final UserProfile child;
   final List<ChildActivity> activities;
+  final DeviceHealthStatus? deviceHealth;
+  final List<DeviceHealthEvent> healthEvents;
 
-  const _ChildCard({required this.child, required this.activities});
+  const _ChildCard({
+    required this.child,
+    required this.activities,
+    required this.deviceHealth,
+    required this.healthEvents,
+  });
 
   int get totalMinutesUsed =>
       activities.fold(0, (sum, a) => sum + a.minutesUsed);
@@ -452,22 +546,108 @@ class _ChildCard extends StatelessWidget {
   int get blockedAppsCount =>
       activities.where((a) => a.isEffectivelyBlocked).length;
 
+  Color _healthColor(BuildContext context) {
+    final effectiveState = deviceHealth?.effectiveStateAt(DateTime.now());
+    switch (effectiveState) {
+      case DeviceTamperState.healthy:
+        return deviceHealth?.enrollmentMode == DeviceEnrollmentMode.managedDevice
+            ? Colors.green
+            : Colors.blue;
+      case DeviceTamperState.degraded:
+        return Colors.orange;
+      case DeviceTamperState.tampered:
+        return Colors.red;
+      case DeviceTamperState.offline:
+        return Colors.grey.shade700;
+      case null:
+        return Theme.of(context).colorScheme.outline;
+    }
+  }
+
+  String _healthSubtitle() {
+    final health = deviceHealth;
+    if (health == null) {
+      return '${activities.length} apps tracked';
+    }
+
+    final label = health.stateLabelAt(DateTime.now());
+    return '${activities.length} apps tracked • $label';
+  }
+
+  String _heartbeatText() {
+    final health = deviceHealth;
+    if (health == null) {
+      return 'No heartbeat received yet';
+    }
+
+    final secondsAgo = DateTime.now().toUtc().difference(
+      health.lastHeartbeatAt.toUtc(),
+    );
+    if (secondsAgo.inMinutes >= 1) {
+      return 'Last heartbeat ${secondsAgo.inMinutes}m ago';
+    }
+    return 'Last heartbeat ${secondsAgo.inSeconds}s ago';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final healthColor = _healthColor(context);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.green.shade100,
-          child: const Icon(Icons.child_care, color: Colors.green),
+          backgroundColor: healthColor.withValues(alpha: 0.14),
+          child: Icon(Icons.child_care, color: healthColor),
         ),
         title: Text('Child Device'),
-        subtitle: Text('${activities.length} apps tracked'),
+        subtitle: Text(_healthSubtitle()),
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                if (deviceHealth != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: healthColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.health_and_safety, color: healthColor),
+                            const SizedBox(width: 8),
+                            Text(
+                              deviceHealth!.stateLabelAt(DateTime.now()),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: healthColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _heartbeatText(),
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                        if (deviceHealth!.tamperReason != null &&
+                            deviceHealth!.tamperReason!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            deviceHealth!.tamperReason!,
+                            style: TextStyle(color: Colors.grey[800]),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 Row(
                   children: [
                     Expanded(
@@ -515,6 +695,54 @@ class _ChildCard extends StatelessWidget {
                           ),
                         ),
                       ),
+
+                if (healthEvents.isNotEmpty) ...[
+                  const Divider(height: 24),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Recent protection events',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...healthEvents.map(
+                    (event) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        switch (event.tamperState) {
+                          DeviceTamperState.healthy => Icons.check_circle,
+                          DeviceTamperState.degraded =>
+                            Icons.warning_amber_rounded,
+                          DeviceTamperState.tampered => Icons.gpp_bad,
+                          DeviceTamperState.offline => Icons.cloud_off,
+                        },
+                        color: switch (event.tamperState) {
+                          DeviceTamperState.healthy => Colors.green,
+                          DeviceTamperState.degraded => Colors.orange,
+                          DeviceTamperState.tampered => Colors.red,
+                          DeviceTamperState.offline => Colors.grey,
+                        },
+                      ),
+                      title: Text(
+                        event.isReminder
+                            ? 'Reminder: ${event.tamperState.name}'
+                            : event.tamperState.name,
+                      ),
+                      subtitle: Text(
+                        event.tamperReason?.trim().isNotEmpty == true
+                            ? event.tamperReason!
+                            : 'Protection state changed.',
+                      ),
+                      trailing: Text(
+                        '${event.createdAt.toLocal().hour.toString().padLeft(2, '0')}:${event.createdAt.toLocal().minute.toString().padLeft(2, '0')}',
+                      ),
+                    ),
+                  ),
+                ],
 
                 // Action Buttons
                 const Divider(height: 24),

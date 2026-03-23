@@ -33,6 +33,12 @@ class NativeService {
       platform: 'unknown',
       monitoringSupported: false,
       monitoringActive: false,
+      enrollmentMode: 'standard',
+      deviceOwner: false,
+      tamperState: 'healthy',
+      tamperReason: null,
+      lastHeartbeatAt: null,
+      criticalPermissionsOk: false,
       usageStatsSupported: false,
       usageStatsGranted: false,
       appBlockingSupported: false,
@@ -136,6 +142,59 @@ class NativeService {
       await _channel.invokeMethod('stopMonitoringService');
     } on PlatformException catch (e) {
       throw Exception('Failed to stop monitoring: ${e.message}');
+    }
+  }
+
+  Future<void> configureMonitoringSession({
+    required String childId,
+    required String accessToken,
+    required String supabaseUrl,
+    required String supabaseAnonKey,
+    String? refreshToken,
+  }) async {
+    try {
+      await _channel.invokeMethod('configureMonitoringSession', {
+        'childId': childId,
+        'accessToken': accessToken,
+        'refreshToken': refreshToken,
+        'supabaseUrl': supabaseUrl,
+        'supabaseAnonKey': supabaseAnonKey,
+      });
+    } on PlatformException catch (e) {
+      throw Exception('Failed to configure monitoring session: ${e.message}');
+    }
+  }
+
+  Future<void> recordPolicySync() async {
+    try {
+      await _channel.invokeMethod('recordPolicySync');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to record policy sync: ${e.message}');
+    }
+  }
+
+  Future<void> syncDeviceHealthNow() async {
+    try {
+      await _channel.invokeMethod('syncDeviceHealthNow');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to sync device health: ${e.message}');
+    }
+  }
+
+  Future<void> requestDeviceAdmin() async {
+    try {
+      await _channel.invokeMethod('requestDeviceAdmin');
+    } on PlatformException catch (e) {
+      throw Exception('Failed to request device admin access: ${e.message}');
+    }
+  }
+
+  Future<bool> applyManagedDevicePolicies() async {
+    try {
+      final result = await _channel.invokeMethod('applyManagedDevicePolicies');
+      return result == true;
+    } on PlatformException catch (e) {
+      throw Exception('Failed to apply managed device policies: ${e.message}');
     }
   }
 

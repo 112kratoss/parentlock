@@ -23,9 +23,30 @@ void callbackDispatcher() {
 
           // Get the current session user
           final user = Supabase.instance.client.auth.currentUser;
+          final session = Supabase.instance.client.auth.currentSession;
 
-          if (user != null) {
+          if (user != null && session != null) {
             debugPrint('Starting background sync for user: ${user.id}');
+
+            final profileResponse = await Supabase.instance.client
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            final role = profileResponse?['role'] as String?;
+            if (role != 'child') {
+              debugPrint('Background sync only applies device health to child accounts');
+              return Future.value(true);
+            }
+
+            await nativeService.configureMonitoringSession(
+              childId: user.id,
+              accessToken: session.accessToken,
+              refreshToken: session.refreshToken,
+              supabaseUrl: SupabaseConfig.supabaseUrl,
+              supabaseAnonKey: SupabaseConfig.supabaseAnonKey,
+            );
 
             // 1. Get stats from native
             final fullUsageStats = await nativeService.getFullUsageStats();
@@ -44,6 +65,8 @@ void callbackDispatcher() {
                 'Background enforcement updated: ${blockedApps.length} apps blocked',
               );
             }
+
+            await nativeService.syncDeviceHealthNow();
 
             debugPrint('Background sync completed successfully');
           } else {

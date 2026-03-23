@@ -15,6 +15,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
                     return
                 }
 
+                ManagedDeviceController.applyManagedDevicePolicies(context)
+
                 val blockedApps = MonitoringStateStore.getBlockedApps(context)
                 BlockOverlayService.updateBlockedApps(blockedApps)
 

@@ -6,7 +6,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const FIREBASE_SERVER_KEY = Deno.env.get('FIREBASE_SERVER_KEY') || ''
 
 interface PushPayload {
-    type: 'sos' | 'geofence' | 'schedule'
+    type: 'sos' | 'geofence' | 'schedule' | 'health'
     childId: string
     parentFcmToken: string
     title: string
@@ -99,7 +99,7 @@ serve(async (req) => {
         }
 
         // Set priority based on type
-        const priority = type === 'sos' ? 'high' : 'normal'
+        const priority = type === 'sos' || type === 'health' ? 'high' : 'normal'
 
         const success = await sendFcmNotification(
             parentFcmToken,

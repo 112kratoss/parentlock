@@ -8,6 +8,12 @@ class NativePlatformStatus {
   final String platform;
   final bool monitoringSupported;
   final bool monitoringActive;
+  final String enrollmentMode;
+  final bool deviceOwner;
+  final String tamperState;
+  final String? tamperReason;
+  final DateTime? lastHeartbeatAt;
+  final bool criticalPermissionsOk;
   final bool usageStatsSupported;
   final bool usageStatsGranted;
   final bool appBlockingSupported;
@@ -24,6 +30,12 @@ class NativePlatformStatus {
     required this.platform,
     required this.monitoringSupported,
     required this.monitoringActive,
+    required this.enrollmentMode,
+    required this.deviceOwner,
+    required this.tamperState,
+    required this.tamperReason,
+    required this.lastHeartbeatAt,
+    required this.criticalPermissionsOk,
     required this.usageStatsSupported,
     required this.usageStatsGranted,
     required this.appBlockingSupported,
@@ -56,6 +68,17 @@ class NativePlatformStatus {
       platform: (json['platform'] as String?) ?? 'unknown',
       monitoringSupported: readBool('monitoringSupported'),
       monitoringActive: readBool('monitoringActive'),
+      enrollmentMode: (json['enrollmentMode'] as String?) ?? 'standard',
+      deviceOwner: readBool('deviceOwner'),
+      tamperState: (json['tamperState'] as String?) ?? 'healthy',
+      tamperReason: json['tamperReason'] as String?,
+      lastHeartbeatAt: json['lastHeartbeatAt'] == null
+          ? null
+          : DateTime.tryParse(json['lastHeartbeatAt'] as String),
+      criticalPermissionsOk: readBool(
+        'criticalPermissionsOk',
+        fallback: true,
+      ),
       usageStatsSupported: readBool('usageStatsSupported'),
       usageStatsGranted: readBool('usageStatsGranted'),
       appBlockingSupported: readBool('appBlockingSupported'),
@@ -89,4 +112,6 @@ class NativePlatformStatus {
 
   bool get canEnforceRestrictions =>
       monitoringSupported && appBlockingSupported && usageStatsSupported;
+
+  bool get isManagedDevice => enrollmentMode == 'managed_device';
 }

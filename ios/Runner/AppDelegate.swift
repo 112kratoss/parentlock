@@ -43,6 +43,8 @@ import UserNotifications
                 code: "UNSUPPORTED",
                 message: "App blocking is not enabled in this iOS build yet. Finish the Screen Time extension setup in Xcode."
             ))
+        case "configureMonitoringSession", "recordPolicySync", "syncDeviceHealthNow":
+            result(true)
         case "stopMonitoringService":
             result(false)
         case "isMonitoringActive":
@@ -51,6 +53,13 @@ import UserNotifications
             checkFamilyControlsPermission(result: result)
         case "requestPermissions", "authorizeFamilyControls":
             requestFamilyControlsAuthorization(result: result)
+        case "requestDeviceAdmin":
+            result(unsupportedFeatureError(
+                code: "UNSUPPORTED",
+                message: "Device owner and device admin flows are only available on Android."
+            ))
+        case "applyManagedDevicePolicies":
+            result(false)
         case "blockApp", "unblockApp", "updateBlockedApps":
             result(unsupportedFeatureError(
                 code: "UNSUPPORTED",
@@ -89,6 +98,14 @@ import UserNotifications
                         "platform": "ios",
                         "monitoringSupported": false,
                         "monitoringActive": false,
+                        "enrollmentMode": "limited",
+                        "deviceOwner": false,
+                        "tamperState": authorizationStatus == .approved ? "healthy" : "degraded",
+                        "tamperReason": authorizationStatus == .approved
+                            ? NSNull()
+                            : "Screen Time authorization is still pending on this iOS build.",
+                        "lastHeartbeatAt": NSNull(),
+                        "criticalPermissionsOk": false,
                         "usageStatsSupported": false,
                         "usageStatsGranted": false,
                         "appBlockingSupported": false,
@@ -108,6 +125,12 @@ import UserNotifications
                 "platform": "ios",
                 "monitoringSupported": false,
                 "monitoringActive": false,
+                "enrollmentMode": "limited",
+                "deviceOwner": false,
+                "tamperState": "degraded",
+                "tamperReason": "Family Controls is unavailable on this iOS version.",
+                "lastHeartbeatAt": NSNull(),
+                "criticalPermissionsOk": false,
                 "usageStatsSupported": false,
                 "usageStatsGranted": false,
                 "appBlockingSupported": false,

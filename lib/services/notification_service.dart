@@ -231,6 +231,22 @@ class NotificationService {
     );
   }
 
+  Future<void> showDeviceHealthAlert({
+    required String childName,
+    required String stateLabel,
+    String? reason,
+  }) async {
+    final body = reason == null || reason.trim().isEmpty
+        ? '$childName is now marked $stateLabel.'
+        : '$childName: $reason';
+
+    await showNotification(
+      title: 'Protection alert for $childName',
+      body: body,
+      payload: stateLabel,
+    );
+  }
+
   /// Show SOS Alert - HIGH PRIORITY emergency notification
   Future<void> showSosAlert({
     required String childName,

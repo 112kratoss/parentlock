@@ -2,11 +2,10 @@ package com.example.parentlock_native
 
 import android.content.Context
 import android.content.Intent
+import android.app.admin.DevicePolicyManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.app.AppOpsManager
-import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -45,29 +44,71 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
             }
             "startMonitoringService" -> {
                 val blockedApps = call.argument<List<String>>("blockedApps") ?: emptyList()
+                MonitoringStateStore.setManualStopRequested(context, false)
                 MonitoringStateStore.setMonitoringEnabled(context, true)
                 MonitoringStateStore.saveBlockedApps(context, blockedApps)
+                MonitoringStateStore.setTamperStatus(context, "healthy", null)
                 BlockOverlayService.updateBlockedApps(blockedApps)
+                BlockOverlayService.hideOverlay(context)
                 MonitoringService.start(context, blockedApps)
                 result.success(true)
             }
             "stopMonitoringService" -> {
+                MonitoringStateStore.setManualStopRequested(context, true)
                 MonitoringStateStore.setMonitoringEnabled(context, false)
+                MonitoringStateStore.setTamperStatus(context, "healthy", null)
+                BlockOverlayService.hideOverlay(context)
                 MonitoringService.stop(context)
+                result.success(true)
+            }
+            "configureMonitoringSession" -> {
+                val childId = call.argument<String>("childId")
+                val accessToken = call.argument<String>("accessToken")
+                val refreshToken = call.argument<String>("refreshToken")
+                val supabaseUrl = call.argument<String>("supabaseUrl")
+                val supabaseAnonKey = call.argument<String>("supabaseAnonKey")
+
+                if (childId.isNullOrBlank() ||
+                    accessToken.isNullOrBlank() ||
+                    supabaseUrl.isNullOrBlank() ||
+                    supabaseAnonKey.isNullOrBlank()
+                ) {
+                    result.error("INVALID_ARGUMENT", "Missing monitoring session configuration", null)
+                } else {
+                    MonitoringStateStore.configureSession(
+                        context = context,
+                        childId = childId,
+                        accessToken = accessToken,
+                        refreshToken = refreshToken,
+                        supabaseUrl = supabaseUrl,
+                        supabaseAnonKey = supabaseAnonKey,
+                    )
+                    result.success(true)
+                }
+            }
+            "recordPolicySync" -> {
+                MonitoringStateStore.recordPolicySync(context, NativeSecurityUtils.nowIsoString())
+                result.success(true)
+            }
+            "syncDeviceHealthNow" -> {
+                DeviceHealthReporter.reportNow(
+                    context = context,
+                    monitoringActiveOverride = MonitoringService.isRunning(),
+                )
                 result.success(true)
             }
             "isMonitoringActive" -> {
                 result.success(MonitoringService.isRunning())
             }
             "checkPermissions" -> {
-                val hasUsageStats = hasUsageStatsPermission()
-                val hasOverlay = hasOverlayPermission()
-                val isIgnoringBattery = isIgnoringBatteryOptimizations()
+                val hasUsageStats = NativeSecurityUtils.hasUsageStatsPermission(context)
+                val hasOverlay = NativeSecurityUtils.hasOverlayPermission(context)
+                val isIgnoringBattery = NativeSecurityUtils.isIgnoringBatteryOptimizations(context)
                 result.success(mapOf(
                     "usageStats" to hasUsageStats,
                     "overlay" to hasOverlay,
                     "batteryOptimization" to isIgnoringBattery,
-                    "notification" to true 
+                    "notification" to NativeSecurityUtils.areNotificationsGranted(context)
                 ))
             }
             "requestPermissions" -> {
@@ -85,6 +126,13 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
             "requestIgnoreBatteryOptimizations" -> {
                 requestIgnoreBatteryOptimizations()
                 result.success(true)
+            }
+            "requestDeviceAdmin" -> {
+                requestDeviceAdmin()
+                result.success(true)
+            }
+            "applyManagedDevicePolicies" -> {
+                result.success(ManagedDeviceController.applyManagedDevicePolicies(context))
             }
             "blockApp" -> {
                 val packageName = call.argument<String>("packageName")
@@ -110,6 +158,7 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
                 val blockedApps = call.argument<List<String>>("blockedApps") ?: emptyList()
                 BlockOverlayService.updateBlockedApps(blockedApps)
                 MonitoringStateStore.saveBlockedApps(context, blockedApps)
+                MonitoringStateStore.recordPolicySync(context, NativeSecurityUtils.nowIsoString())
                 result.success(true)
             }
             "getCurrentForegroundApp" -> {
@@ -134,45 +183,12 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
         channel.setMethodCallHandler(null)
     }
 
-    private fun hasUsageStatsPermission(): Boolean {
-        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(
-                AppOpsManager.OPSTR_GET_USAGE_STATS,
-                android.os.Process.myUid(),
-                context.packageName
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            appOps.checkOpNoThrow(
-                AppOpsManager.OPSTR_GET_USAGE_STATS,
-                android.os.Process.myUid(),
-                context.packageName
-            )
-        }
-        return mode == AppOpsManager.MODE_ALLOWED
-    }
-
-    private fun hasOverlayPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(context)
-        } else {
-            true
-        }
-    }
-    
-    private fun isIgnoringBatteryOptimizations(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-            return powerManager.isIgnoringBatteryOptimizations(context.packageName)
-        }
-        return true
-    }
-
     private fun requestNecessaryPermissions() {
         requestUsageStatsPermission()
         
-        if (!hasOverlayPermission() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (!NativeSecurityUtils.hasOverlayPermission(context) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        ) {
             requestOverlayPermission()
         }
     }
@@ -195,7 +211,9 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
     }
 
     private fun requestIgnoreBatteryOptimizations() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isIgnoringBatteryOptimizations()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            !NativeSecurityUtils.isIgnoringBatteryOptimizations(context)
+        ) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             intent.data = Uri.parse("package:${context.packageName}")
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -203,22 +221,48 @@ class ParentlockNativePlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
-    private fun getPlatformStatus(): Map<String, Any> {
+    private fun requestDeviceAdmin() {
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(
+                DevicePolicyManager.EXTRA_DEVICE_ADMIN,
+                ManagedDeviceController.adminComponent(context),
+            )
+            putExtra(
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "ParentLock uses device admin to harden protection on child devices.",
+            )
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    private fun getPlatformStatus(): Map<String, Any?> {
+        val snapshot = DeviceHealthReporter.buildSnapshot(
+            context = context,
+            monitoringActiveOverride = MonitoringService.isRunning(),
+        )
+
         return mapOf(
             "platform" to "android",
             "monitoringSupported" to true,
-            "monitoringActive" to MonitoringService.isRunning(),
+            "monitoringActive" to snapshot.monitoringActive,
+            "enrollmentMode" to snapshot.enrollmentMode,
+            "deviceOwner" to snapshot.deviceOwner,
+            "tamperState" to snapshot.tamperState,
+            "tamperReason" to snapshot.tamperReason,
+            "lastHeartbeatAt" to (MonitoringStateStore.getLastHeartbeatAt(context) ?: snapshot.lastHeartbeatAt),
+            "criticalPermissionsOk" to snapshot.criticalPermissionsOk,
             "usageStatsSupported" to true,
-            "usageStatsGranted" to hasUsageStatsPermission(),
+            "usageStatsGranted" to NativeSecurityUtils.hasUsageStatsPermission(context),
             "appBlockingSupported" to true,
             "overlayPermissionRequired" to true,
-            "overlayGranted" to hasOverlayPermission(),
+            "overlayGranted" to NativeSecurityUtils.hasOverlayPermission(context),
             "batteryOptimizationSupported" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M),
-            "batteryOptimizationExempt" to isIgnoringBatteryOptimizations(),
+            "batteryOptimizationExempt" to NativeSecurityUtils.isIgnoringBatteryOptimizations(context),
             "familyControlsSupported" to false,
             "familyControlsAuthorized" to false,
-            "notificationsGranted" to NotificationManagerCompat.from(context).areNotificationsEnabled(),
-            "backgroundLocationSupported" to true
+            "notificationsGranted" to NativeSecurityUtils.areNotificationsGranted(context),
+            "backgroundLocationSupported" to true,
         )
     }
 }

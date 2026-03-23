@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/child_activity.dart';
 import '../models/category_limit.dart';
+import '../models/device_health.dart';
 import '../models/user_profile.dart';
 
 /// Extension to capitalize first letter of string
@@ -53,6 +54,106 @@ class DatabaseService {
     } catch (e) {
       return null;
     }
+  }
+
+  // ==================== DEVICE HEALTH ====================
+
+  Future<void> upsertDeviceHealth(DeviceHealthStatus status) async {
+    await _supabase.from('device_health').upsert(status.toJson());
+  }
+
+  Future<void> reconcileDeviceHealthStates() async {
+    await _supabase.rpc('reconcile_device_health_states');
+  }
+
+  Future<Map<String, DeviceHealthStatus>> getDeviceHealthForChildren(
+    List<String> childIds,
+  ) async {
+    if (childIds.isEmpty) return {};
+
+    final response = await _supabase
+        .from('device_health')
+        .select()
+        .inFilter('child_id', childIds);
+
+    final healthByChild = <String, DeviceHealthStatus>{};
+    for (final item in (response as List).cast<Map<String, dynamic>>()) {
+      final status = DeviceHealthStatus.fromJson(item);
+      healthByChild[status.childId] = status;
+    }
+    return healthByChild;
+  }
+
+  Future<Map<String, List<DeviceHealthEvent>>> getDeviceHealthEventsForChildren(
+    List<String> childIds, {
+    int limitPerChild = 3,
+  }) async {
+    if (childIds.isEmpty) return {};
+
+    final response = await _supabase
+        .from('device_health_events')
+        .select()
+        .inFilter('child_id', childIds)
+        .order('created_at', ascending: false)
+        .limit(childIds.length * limitPerChild * 4);
+
+    final eventsByChild = <String, List<DeviceHealthEvent>>{};
+    for (final item in (response as List).cast<Map<String, dynamic>>()) {
+      final event = DeviceHealthEvent.fromJson(item);
+      final events = eventsByChild.putIfAbsent(event.childId, () => []);
+      if (events.length < limitPerChild) {
+        events.add(event);
+      }
+    }
+    return eventsByChild;
+  }
+
+  RealtimeChannel subscribeToDeviceHealth({
+    required String childId,
+    required void Function(DeviceHealthStatus) onUpdate,
+  }) {
+    return _supabase
+        .channel('device_health_$childId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'device_health',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'child_id',
+            value: childId,
+          ),
+          callback: (payload) {
+            if (payload.newRecord.isNotEmpty) {
+              onUpdate(DeviceHealthStatus.fromJson(payload.newRecord));
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  RealtimeChannel subscribeToDeviceHealthEvents({
+    required String childId,
+    required void Function(DeviceHealthEvent) onEvent,
+  }) {
+    return _supabase
+        .channel('device_health_events_$childId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'device_health_events',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'child_id',
+            value: childId,
+          ),
+          callback: (payload) {
+            if (payload.newRecord.isNotEmpty) {
+              onEvent(DeviceHealthEvent.fromJson(payload.newRecord));
+            }
+          },
+        )
+        .subscribe();
   }
 
   // ==================== CHILD ACTIVITY ====================

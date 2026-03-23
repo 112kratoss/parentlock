@@ -14,7 +14,9 @@ class MonitoringService : Service() {
     private var serviceHandler: Handler? = null
     private var serviceLooper: Looper? = null
     private val checkInterval = 2000L // Check every 2 seconds
+    private val heartbeatInterval = 60_000L
     private var blockedApps = mutableListOf<String>()
+    private var lastHeartbeatAt = 0L
     
     companion object {
         private const val NOTIFICATION_ID = 1001
@@ -65,6 +67,7 @@ class MonitoringService : Service() {
         blockedApps =
             intent?.getStringArrayListExtra("blockedApps")?.toMutableList()
                 ?: restoredBlockedApps.toMutableList()
+        MonitoringStateStore.setManualStopRequested(this, false)
         MonitoringStateStore.setMonitoringEnabled(this, true)
         MonitoringStateStore.saveBlockedApps(this, blockedApps)
         BlockOverlayService.updateBlockedApps(blockedApps)
@@ -93,6 +96,25 @@ class MonitoringService : Service() {
         stopMonitoring()
         isServiceRunning = false
         serviceLooper?.quit()
+
+        if (MonitoringStateStore.isMonitoringEnabled(this) &&
+            !MonitoringStateStore.isManualStopRequested(this)
+        ) {
+            MonitoringStateStore.setTamperStatus(
+                this,
+                "tampered",
+                "Monitoring service was stopped from system controls.",
+            )
+            DeviceHealthReporter.reportNow(
+                this,
+                monitoringActiveOverride = false,
+                forcedTamperState = "tampered",
+                forcedTamperReason = "Monitoring service was stopped from system controls.",
+            )
+            BlockOverlayService.showTamperOverlay(this)
+            scheduleRestart()
+        }
+
         super.onDestroy()
     }
     
@@ -111,6 +133,15 @@ class MonitoringService : Service() {
                          BlockOverlayService.showOverlay(this@MonitoringService)
                     }
                 }
+
+                val now = System.currentTimeMillis()
+                if (now - lastHeartbeatAt >= heartbeatInterval) {
+                    DeviceHealthReporter.reportNow(
+                        this@MonitoringService,
+                        monitoringActiveOverride = true,
+                    )
+                    lastHeartbeatAt = now
+                }
             } catch (e: Exception) {
                 android.util.Log.e("MonitoringService", "Error in monitoring loop", e)
             }
@@ -125,25 +156,7 @@ class MonitoringService : Service() {
             return
         }
         android.util.Log.d("MonitoringService", "Task removed, restarting service")
-        
-        val restartServiceIntent = Intent(applicationContext, MonitoringService::class.java).also {
-            it.setPackage(packageName)
-            // Re-pass the list of blocked apps if possible, though they might be lost in this context specifically.
-            // Ideally should persist blocked apps to SharedPreferences for full resilience.
-            // For now, restarting the service is the priority.
-             it.putStringArrayListExtra("blockedApps", ArrayList(blockedApps))
-        }
-
-        val restartServicePendingIntent = PendingIntent.getService(
-            applicationContext, 1, restartServiceIntent, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val alarmService = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmService.set(
-            AlarmManager.ELAPSED_REALTIME,
-            android.os.SystemClock.elapsedRealtime() + 1000,
-            restartServicePendingIntent
-        )
+        scheduleRestart()
     }
     
     private fun startMonitoring() {
@@ -153,6 +166,27 @@ class MonitoringService : Service() {
     
     private fun stopMonitoring() {
         serviceHandler?.removeCallbacks(monitoringRunnable)
+    }
+
+    private fun scheduleRestart() {
+        val restartServiceIntent = Intent(applicationContext, MonitoringService::class.java).also {
+            it.setPackage(packageName)
+            it.putStringArrayListExtra("blockedApps", ArrayList(blockedApps))
+        }
+
+        val restartServicePendingIntent = PendingIntent.getService(
+            applicationContext,
+            1,
+            restartServiceIntent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val alarmService = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmService.set(
+            AlarmManager.ELAPSED_REALTIME,
+            android.os.SystemClock.elapsedRealtime() + 1000,
+            restartServicePendingIntent,
+        )
     }
     
     private fun createNotificationChannel() {
