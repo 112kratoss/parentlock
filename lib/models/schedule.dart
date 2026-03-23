@@ -1,13 +1,13 @@
 /// Schedule Model
-/// 
+///
 /// Represents a screen time schedule (bedtime, homework, allowed hours).
 library;
 
 /// Schedule types
 enum ScheduleType {
-  allowedHours,  // When phone is allowed
-  bedtime,       // Block everything at night
-  homework;      // Block distracting apps during study
+  allowedHours, // When phone is allowed
+  bedtime, // Block everything at night
+  homework; // Block distracting apps during study
 
   String toJson() {
     switch (this) {
@@ -89,7 +89,7 @@ class Schedule {
   final String childId;
   final String name;
   final ScheduleType scheduleType;
-  final List<int> daysOfWeek;  // 0=Sun, 1=Mon, etc.
+  final List<int> daysOfWeek; // 0=Sun, 1=Mon, etc.
   final TimeOfDayData startTime;
   final TimeOfDayData endTime;
   final List<String>? blockedCategories;
@@ -154,17 +154,25 @@ class Schedule {
 
     // Check day of week (DateTime uses 1=Mon, 7=Sun, but we use 0=Sun, 1=Mon)
     final dayOfWeek = now.weekday == 7 ? 0 : now.weekday;
-    if (!daysOfWeek.contains(dayOfWeek)) return false;
-
-    // Check time
+    final previousDay = dayOfWeek == 0 ? 6 : dayOfWeek - 1;
     final currentMinutes = now.hour * 60 + now.minute;
     final startMinutes = startTime.hour * 60 + startTime.minute;
     final endMinutes = endTime.hour * 60 + endTime.minute;
 
     // Handle overnight schedules (e.g., 9 PM - 7 AM)
     if (startMinutes > endMinutes) {
-      return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+      if (currentMinutes >= startMinutes) {
+        return daysOfWeek.contains(dayOfWeek);
+      }
+
+      if (currentMinutes < endMinutes) {
+        return daysOfWeek.contains(previousDay);
+      }
+
+      return false;
     }
+
+    if (!daysOfWeek.contains(dayOfWeek)) return false;
 
     return currentMinutes >= startMinutes && currentMinutes < endMinutes;
   }
@@ -179,7 +187,7 @@ class Schedule {
     if (daysOfWeek.length == 7) return 'Every day';
     if (_listEquals(daysOfWeek, [1, 2, 3, 4, 5])) return 'Weekdays';
     if (_listEquals(daysOfWeek, [0, 6])) return 'Weekends';
-    
+
     final dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return daysOfWeek.map((d) => dayNames[d]).join(', ');
   }

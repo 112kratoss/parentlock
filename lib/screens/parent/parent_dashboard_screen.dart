@@ -1,5 +1,5 @@
 /// Parent Dashboard Screen
-/// 
+///
 /// Main dashboard for parents showing children's statistics
 library;
 
@@ -7,11 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/child_activity.dart';
+import '../../models/parent_link_code.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth_service.dart';
 import '../../services/database_service.dart';
 import '../../services/location_service.dart';
-import '../../services/notification_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/geofence.dart';
 import 'child_apps_screen.dart';
@@ -28,12 +28,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   final _databaseService = DatabaseService();
   final _locationService = LocationService();
   final _notificationService = NotificationService();
-  
+
   List<UserProfile> _children = [];
   List<ChildActivity> _activities = [];
   bool _isLoading = true;
-  String? _linkingCode;
-  
+  ParentLinkCode? _linkingCode;
+
   // Real-time subscriptions
   RealtimeChannel? _sosSubscription;
   final Map<String, RealtimeChannel> _geofenceSubscriptions = {};
@@ -61,18 +61,20 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final userId = _authService.currentUser?.id;
       if (userId != null) {
         final children = await _databaseService.getLinkedChildren(userId);
-        final activities = await _databaseService.getParentChildrenActivities(userId);
-        
+        final activities = await _databaseService.getParentChildrenActivities(
+          userId,
+        );
+
         setState(() {
           _children = children;
           _activities = activities;
         });
-        
+
         // Set up real-time subscriptions for SOS and geofence
         _setupSosSubscription(userId);
         // Set up real-time subscriptions for SOS and geofence
@@ -82,9 +84,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -100,7 +102,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         // Find child name
         final child = _children.where((c) => c.id == alert.childId).firstOrNull;
         final childName = child != null ? 'Child' : 'Your child';
-        
+
         // Show high-priority notification
         await _notificationService.showSosAlert(
           childName: childName,
@@ -108,7 +110,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           latitude: alert.latitude,
           longitude: alert.longitude,
         );
-        
+
         // Show dialog if app is open
         if (mounted) {
           _showSosAlertDialog(childName, alert);
@@ -124,7 +126,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       sub.unsubscribe();
     }
     _geofenceSubscriptions.clear();
-    
+
     // Subscribe to each child's geofence events
     for (final child in children) {
       _geofenceSubscriptions[child.id] = Supabase.instance.client
@@ -142,7 +144,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
               if (payload.newRecord.isNotEmpty) {
                 final eventType = payload.newRecord['event_type'] as String?;
                 final geofenceId = payload.newRecord['geofence_id'] as String?;
-                
+
                 // Fetch geofence name
                 String zoneName = 'Safe Zone';
                 if (geofenceId != null) {
@@ -155,7 +157,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                     zoneName = geoResponse?['name'] ?? 'Safe Zone';
                   } catch (_) {}
                 }
-                
+
                 // Show notification
                 await _notificationService.showGeofenceAlert(
                   childName: 'Child',
@@ -176,25 +178,26 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       sub.unsubscribe();
     }
     _activitySubscriptions.clear();
-    
+
     for (final child in children) {
-      _activitySubscriptions[child.id] = _databaseService.subscribeToChildActivities(
-        childId: child.id,
-        onUpdate: (updatedActivity) {
-          if (mounted) {
-            setState(() {
-              final index = _activities.indexWhere(
-                (a) => a.id == updatedActivity.id
-              );
-              if (index != -1) {
-                _activities[index] = updatedActivity;
-              } else {
-                _activities.add(updatedActivity);
+      _activitySubscriptions[child.id] = _databaseService
+          .subscribeToChildActivities(
+            childId: child.id,
+            onUpdate: (updatedActivity) {
+              if (mounted) {
+                setState(() {
+                  final index = _activities.indexWhere(
+                    (a) => a.id == updatedActivity.id,
+                  );
+                  if (index != -1) {
+                    _activities[index] = updatedActivity;
+                  } else {
+                    _activities.add(updatedActivity);
+                  }
+                });
               }
-            });
-          }
-        },
-      );
+            },
+          );
     }
   }
 
@@ -270,7 +273,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
+            onPressed: () async {
+              await _loadData();
+              await _generateLinkingCode();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -292,7 +298,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Linking Code Card
-                    _LinkingCodeCard(code: _linkingCode ?? 'Loading...'),
+                    _LinkingCodeCard(linkCode: _linkingCode),
                     const SizedBox(height: 24),
 
                     // Children Section
@@ -303,16 +309,18 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     if (_children.isEmpty)
                       _EmptyChildrenCard()
                     else
-                      ..._children.map((child) => _ChildCard(
-                        child: child,
-                        activities: _activities.where(
-                          (a) => a.childId == child.id
-                        ).toList(),
-                      )),
+                      ..._children.map(
+                        (child) => _ChildCard(
+                          child: child,
+                          activities: _activities
+                              .where((a) => a.childId == child.id)
+                              .toList(),
+                        ),
+                      ),
 
                     const SizedBox(height: 24),
 
@@ -324,10 +332,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    _StatsGrid(
-                      activities: _activities,
-                      children: _children,
-                    ),
+                    _StatsGrid(activities: _activities, children: _children),
                   ],
                 ),
               ),
@@ -338,12 +343,27 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
 }
 
 class _LinkingCodeCard extends StatelessWidget {
-  final String code;
+  final ParentLinkCode? linkCode;
 
-  const _LinkingCodeCard({required this.code});
+  const _LinkingCodeCard({required this.linkCode});
+
+  String _formatExpiry(DateTime expiresAt) {
+    final local = expiresAt.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final code = linkCode?.code ?? 'Loading...';
+    final expiryText = linkCode == null
+        ? 'Generating a temporary link code...'
+        : linkCode!.isExpired
+        ? 'This code has expired. Refresh to generate a new one.'
+        : 'Valid until ${_formatExpiry(linkCode!.expiresAt)}.';
+
     return Card(
       color: Theme.of(context).colorScheme.primaryContainer,
       child: Padding(
@@ -353,10 +373,7 @@ class _LinkingCodeCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.link,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                Icon(Icons.link, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
                   'Your Linking Code',
@@ -386,7 +403,7 @@ class _LinkingCodeCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Share this code with your child to link their device.',
+              'Share this temporary code with your child to link their device. $expiryText',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -404,11 +421,7 @@ class _EmptyChildrenCard extends StatelessWidget {
         padding: const EdgeInsets.all(32),
         child: Column(
           children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               'No children linked yet',
@@ -431,15 +444,12 @@ class _ChildCard extends StatelessWidget {
   final UserProfile child;
   final List<ChildActivity> activities;
 
-  const _ChildCard({
-    required this.child,
-    required this.activities,
-  });
+  const _ChildCard({required this.child, required this.activities});
 
-  int get totalMinutesUsed => 
+  int get totalMinutesUsed =>
       activities.fold(0, (sum, a) => sum + a.minutesUsed);
-  
-  int get blockedAppsCount => 
+
+  int get blockedAppsCount =>
       activities.where((a) => a.isEffectivelyBlocked).length;
 
   @override
@@ -481,21 +491,31 @@ class _ChildCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 if (activities.isNotEmpty)
-                  ...activities.take(3).map((a) => ListTile(
-                    dense: true,
-                    leading: Icon(
-                      a.isEffectivelyBlocked ? Icons.block : Icons.check_circle,
-                      color: a.isEffectivelyBlocked ? Colors.red : Colors.green,
-                    ),
-                    title: Text(a.appDisplayName),
-                    trailing: Text(
-                      '${a.minutesUsed}/${a.dailyLimitMinutes}m',
-                      style: TextStyle(
-                        color: a.isEffectivelyBlocked ? Colors.red : Colors.grey,
+                  ...activities
+                      .take(3)
+                      .map(
+                        (a) => ListTile(
+                          dense: true,
+                          leading: Icon(
+                            a.isEffectivelyBlocked
+                                ? Icons.block
+                                : Icons.check_circle,
+                            color: a.isEffectivelyBlocked
+                                ? Colors.red
+                                : Colors.green,
+                          ),
+                          title: Text(a.appDisplayName),
+                          trailing: Text(
+                            '${a.minutesUsed}/${a.dailyLimitMinutes}m',
+                            style: TextStyle(
+                              color: a.isEffectivelyBlocked
+                                  ? Colors.red
+                                  : Colors.grey,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  )),
-                
+
                 // Action Buttons
                 const Divider(height: 24),
                 Row(
@@ -596,18 +616,9 @@ class _StatTile extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
           ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         ],
       ),
     );
@@ -624,8 +635,10 @@ class _StatsGrid extends StatelessWidget {
   }) : _children = children;
 
   int get totalMinutes => activities.fold(0, (sum, a) => sum + a.minutesUsed);
-  int get blockedCount => activities.where((a) => a.isEffectivelyBlocked).length;
-  int get activeCount => activities.where((a) => !a.isEffectivelyBlocked).length;
+  int get blockedCount =>
+      activities.where((a) => a.isEffectivelyBlocked).length;
+  int get activeCount =>
+      activities.where((a) => !a.isEffectivelyBlocked).length;
 
   @override
   Widget build(BuildContext context) {
@@ -656,9 +669,10 @@ class _StatsGrid extends StatelessWidget {
               // This handles cases where real-time might be delayed
               // or connection dropped during the child screen session.
               if (context.mounted) {
-                 // Trigger parent refresh
-                 final parentState = context.findAncestorStateOfType<_ParentDashboardScreenState>();
-                 parentState?._loadData();
+                // Trigger parent refresh
+                final parentState = context
+                    .findAncestorStateOfType<_ParentDashboardScreenState>();
+                parentState?._loadData();
               }
             },
             child: _QuickStatCard(
@@ -685,8 +699,9 @@ class _StatsGrid extends StatelessWidget {
               );
               // Explicitly refresh data when returning
               if (context.mounted) {
-                 final parentState = context.findAncestorStateOfType<_ParentDashboardScreenState>();
-                 parentState?._loadData();
+                final parentState = context
+                    .findAncestorStateOfType<_ParentDashboardScreenState>();
+                parentState?._loadData();
               }
             },
             child: _QuickStatCard(
@@ -734,10 +749,7 @@ class _QuickStatCard extends StatelessWidget {
             ),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),

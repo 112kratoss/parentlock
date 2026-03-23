@@ -1,5 +1,5 @@
 /// Child Link Screen
-/// 
+///
 /// Screen for children to link their device to a parent's account
 library;
 
@@ -40,7 +40,7 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
 
     try {
       await _authService.linkWithCode(_codeController.text.trim());
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -72,10 +72,7 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.green,
-              Colors.green.shade700,
-            ],
+            colors: [Colors.green, Colors.green.shade700],
           ),
         ),
         child: SafeArea(
@@ -99,7 +96,7 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  
+
                   // Title
                   const Text(
                     'Link to Parent',
@@ -111,7 +108,7 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Enter the code from your parent\'s device to link this account.',
+                    'Enter the temporary code from your parent\'s device to link this account.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
@@ -119,7 +116,7 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
                     ),
                   ),
                   const SizedBox(height: 40),
-                  
+
                   // Code input
                   Card(
                     shape: RoundedRectangleBorder(
@@ -149,6 +146,12 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
                             ),
                             textCapitalization: TextCapitalization.characters,
                             maxLength: 8,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Codes expire quickly for safety.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                           const SizedBox(height: 16),
                           SizedBox(
@@ -185,7 +188,7 @@ class _ChildLinkScreenState extends State<ChildLinkScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Skip option (for testing)
                   TextButton(
                     onPressed: () => context.go('/child/active'),

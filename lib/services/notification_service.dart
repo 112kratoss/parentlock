@@ -1,5 +1,5 @@
 /// Notification Service
-/// 
+///
 /// Handles Firebase Cloud Messaging (FCM) for push notifications.
 /// - Initializes FCM
 /// - Handles foreground/background messages
@@ -20,7 +20,7 @@ Future<void> handleBackgroundMessage(RemoteMessage message) async {
 
 class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = 
+  final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   final AuthService _authService = AuthService();
 
@@ -33,36 +33,46 @@ class NotificationService {
   );
 
   /// SOS Alert channel - highest priority
-  static const AndroidNotificationChannel _sosChannel = AndroidNotificationChannel(
-    'parentlock_sos',
-    'SOS Alerts',
-    description: 'Emergency alerts from your child',
-    importance: Importance.max,
-    playSound: true,
-    enableVibration: true,
-  );
+  static const AndroidNotificationChannel _sosChannel =
+      AndroidNotificationChannel(
+        'parentlock_sos',
+        'SOS Alerts',
+        description: 'Emergency alerts from your child',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
 
   /// Geofence channel
-  static const AndroidNotificationChannel _geofenceChannel = AndroidNotificationChannel(
-    'parentlock_geofence',
-    'Location Alerts',
-    description: 'Alerts when your child enters or leaves a safe zone',
-    importance: Importance.high,
-  );
+  static const AndroidNotificationChannel _geofenceChannel =
+      AndroidNotificationChannel(
+        'parentlock_geofence',
+        'Location Alerts',
+        description: 'Alerts when your child enters or leaves a safe zone',
+        importance: Importance.high,
+      );
 
   /// Initialize the notification service
   Future<void> initialize() async {
     // Request permission
     await _requestPermission();
-    
+
     // Set up local notifications
     await _setupLocalNotifications();
-    
+
     // Get FCM token and save to profile
     await _getFcmToken();
-    
+
     // Set up message handlers
     _setupMessageHandlers();
+  }
+
+  /// Sync the current FCM token to the authenticated user's profile.
+  Future<void> syncCurrentTokenToProfile() async {
+    final token = await _messaging.getToken();
+    if (token == null) return;
+
+    await _authService.updateFcmToken(token);
   }
 
   /// Request notification permissions
@@ -80,8 +90,10 @@ class NotificationService {
   /// Set up local notifications for foreground display
   Future<void> _setupLocalNotifications() async {
     // Android initialization
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+
     // iOS initialization
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -103,8 +115,9 @@ class NotificationService {
     if (Platform.isAndroid) {
       final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+
       await androidPlugin?.createNotificationChannel(_channel);
       await androidPlugin?.createNotificationChannel(_sosChannel);
       await androidPlugin?.createNotificationChannel(_geofenceChannel);
@@ -121,9 +134,9 @@ class NotificationService {
   Future<String?> _getFcmToken() async {
     try {
       final token = await _messaging.getToken();
-      
+
       if (token != null) {
-        await _authService.updateFcmToken(token);
+        await syncCurrentTokenToProfile();
         print('FCM Token: $token');
       }
 
@@ -154,7 +167,7 @@ class NotificationService {
   /// Handle foreground message - show local notification
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     final notification = message.notification;
-    
+
     if (notification == null) return;
 
     // Show local notification
@@ -264,7 +277,7 @@ class NotificationService {
     await _localNotifications.show(
       DateTime.now().millisecondsSinceEpoch.remainder(100000),
       '$emoji $childName $action $zoneName',
-      isEntering 
+      isEntering
           ? '$childName has arrived at $zoneName'
           : '$childName has left $zoneName',
       NotificationDetails(
@@ -291,8 +304,10 @@ class NotificationService {
     required String scheduleName,
     required bool isStarting,
   }) async {
-    final title = isStarting ? '🔒 $scheduleName Started' : '🔓 $scheduleName Ended';
-    final body = isStarting 
+    final title = isStarting
+        ? '🔒 $scheduleName Started'
+        : '🔓 $scheduleName Ended';
+    final body = isStarting
         ? 'Device restrictions are now active'
         : 'Device restrictions have ended';
 

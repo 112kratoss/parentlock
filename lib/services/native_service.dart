@@ -1,5 +1,5 @@
 /// Native Service
-/// 
+///
 /// Bridge to native platform code via MethodChannel.
 /// Handles communication with Android (Kotlin) and iOS (Swift) code for:
 /// - Usage statistics
@@ -10,15 +10,17 @@ library;
 import 'package:flutter/services.dart';
 
 class NativeService {
-  static const MethodChannel _channel = MethodChannel('com.parentlock.parentlock/native');
+  static const MethodChannel _channel = MethodChannel(
+    'com.parentlock.parentlock/native',
+  );
 
   /// Get usage statistics from the native platform
-  /// 
+  ///
   /// Returns a map of package name to minutes used today
   Future<Map<String, int>> getUsageStats() async {
     try {
       final result = await _channel.invokeMethod('getUsageStats');
-      
+
       // Android returns List<Map> with app_package_name, app_display_name, minutes_used
       if (result is List) {
         final Map<String, int> usageMap = {};
@@ -33,7 +35,7 @@ class NativeService {
         }
         return usageMap;
       }
-      
+
       // Fallback for other formats
       return Map<String, int>.from(result as Map);
     } on PlatformException catch (e) {
@@ -46,18 +48,23 @@ class NativeService {
   Future<List<Map<String, dynamic>>> getFullUsageStats() async {
     try {
       final result = await _channel.invokeMethod('getUsageStats');
-      
+
       if (result is List) {
-        return result.map((item) {
-          if (item is Map) {
-            return {
-              'packageName': item['app_package_name'] as String? ?? '',
-              'displayName': item['app_display_name'] as String? ?? '',
-              'minutesUsed': item['minutes_used'] as int? ?? 0,
-            };
-          }
-          return <String, dynamic>{};
-        }).where((m) => m['packageName'] != '').toList().cast<Map<String, dynamic>>();
+        return result
+            .map((item) {
+              if (item is Map) {
+                return {
+                  'packageName': item['app_package_name'] as String? ?? '',
+                  'displayName': item['app_display_name'] as String? ?? '',
+                  'minutesUsed': item['minutes_used'] as int? ?? 0,
+                  'app_category': item['app_category'] as String? ?? 'other',
+                };
+              }
+              return <String, dynamic>{};
+            })
+            .where((m) => m['packageName'] != '')
+            .toList()
+            .cast<Map<String, dynamic>>();
       }
       return [];
     } on PlatformException catch (e) {
@@ -66,7 +73,7 @@ class NativeService {
   }
 
   /// Start the native monitoring service
-  /// 
+  ///
   /// The service runs in the background and tracks app usage
   Future<void> startMonitoringService(List<String> blockedApps) async {
     try {
@@ -88,7 +95,7 @@ class NativeService {
   }
 
   /// Check if required permissions are granted
-  /// 
+  ///
   /// Android: PACKAGE_USAGE_STATS, SYSTEM_ALERT_WINDOW
   /// iOS: Screen Time authorization
   Future<bool> checkPermissions() async {
@@ -101,7 +108,9 @@ class NativeService {
     try {
       final result = await _channel.invokeMethod('checkPermissions');
       if (result is Map) {
-        return Map<String, bool>.from(result.map((key, value) => MapEntry(key.toString(), value as bool)));
+        return Map<String, bool>.from(
+          result.map((key, value) => MapEntry(key.toString(), value as bool)),
+        );
       }
       return {
         'usageStats': result as bool? ?? false,
@@ -131,7 +140,7 @@ class NativeService {
   }
 
   /// Request required permissions
-  /// 
+  ///
   /// Opens system settings for the user to grant permissions
   Future<void> requestPermissions() async {
     try {
@@ -164,18 +173,18 @@ class NativeService {
     try {
       await _channel.invokeMethod('requestIgnoreBatteryOptimizations');
     } on PlatformException catch (e) {
-      throw Exception('Failed to request battery optimization exemption: ${e.message}');
+      throw Exception(
+        'Failed to request battery optimization exemption: ${e.message}',
+      );
     }
   }
 
   /// Block a specific app
-  /// 
+  ///
   /// Shows a full-screen overlay blocking the app
   Future<void> blockApp(String packageName) async {
     try {
-      await _channel.invokeMethod('blockApp', {
-        'packageName': packageName,
-      });
+      await _channel.invokeMethod('blockApp', {'packageName': packageName});
     } on PlatformException catch (e) {
       throw Exception('Failed to block app: ${e.message}');
     }
@@ -184,9 +193,7 @@ class NativeService {
   /// Unblock a specific app
   Future<void> unblockApp(String packageName) async {
     try {
-      await _channel.invokeMethod('unblockApp', {
-        'packageName': packageName,
-      });
+      await _channel.invokeMethod('unblockApp', {'packageName': packageName});
     } on PlatformException catch (e) {
       throw Exception('Failed to unblock app: ${e.message}');
     }

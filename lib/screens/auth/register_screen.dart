@@ -1,11 +1,12 @@
 /// Register Screen
-/// 
+///
 /// User registration with email/password
 library;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -20,7 +21,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _authService = AuthService();
-  
+  final _notificationService = NotificationService();
+
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   bool _obscurePassword = true;
@@ -46,15 +48,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
         role: 'pending', // Will be updated in role selection
       );
+      await _notificationService.syncCurrentTokenToProfile();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Registration successful! Please check your email to verify.'),
+            content: Text(
+              'Registration successful! Please check your email to verify.',
+            ),
             backgroundColor: Colors.green,
           ),
         );
-        
+
         // Go to role selection after registration
         context.go('/role-selection');
       }
@@ -77,16 +82,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       final user = await _authService.signInWithGoogle();
-      
+
       if (user == null) {
         // User cancelled sign-in
         return;
       }
 
+      await _notificationService.syncCurrentTokenToProfile();
+
       if (mounted) {
         // Check if user has a profile/role
         final profile = await _authService.getCurrentProfile();
-        
+
         if (profile == null || profile.role == 'pending') {
           // New user without role - go to role selection
           context.go('/role-selection');
@@ -152,21 +159,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           color: Theme.of(context).colorScheme.primary,
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Title
                         Text(
                           'Create Account',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Get started with ParentLock',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey,
-                          ),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
                         ),
                         const SizedBox(height: 32),
 
@@ -202,12 +210,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             prefixIcon: const Icon(Icons.lock_outlined),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword 
-                                    ? Icons.visibility_outlined 
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
                               ),
                               onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
                               },
                             ),
                             border: OutlineInputBorder(
@@ -235,12 +245,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             prefixIcon: const Icon(Icons.lock_outlined),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscureConfirmPassword 
-                                    ? Icons.visibility_outlined 
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
                               ),
                               onPressed: () {
-                                setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                                setState(
+                                  () => _obscureConfirmPassword =
+                                      !_obscureConfirmPassword,
+                                );
                               },
                             ),
                             border: OutlineInputBorder(
@@ -274,7 +287,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Text(
                                     'Create Account',
@@ -295,32 +310,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Divider with "or"
                         Row(
                           children: [
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            Expanded(
+                              child: Divider(color: Colors.grey.shade300),
+                            ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: Text(
                                 'or',
                                 style: TextStyle(color: Colors.grey.shade600),
                               ),
                             ),
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            Expanded(
+                              child: Divider(color: Colors.grey.shade300),
+                            ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Google Sign-In button
                         SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: OutlinedButton.icon(
-                            onPressed: (_isLoading || _isGoogleLoading) ? null : _signInWithGoogle,
+                            onPressed: (_isLoading || _isGoogleLoading)
+                                ? null
+                                : _signInWithGoogle,
                             style: OutlinedButton.styleFrom(
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -331,17 +354,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : Image.network(
                                     'https://www.google.com/favicon.ico',
                                     height: 24,
                                     width: 24,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        const Icon(Icons.g_mobiledata, size: 24),
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            const Icon(
+                                              Icons.g_mobiledata,
+                                              size: 24,
+                                            ),
                                   ),
                             label: Text(
-                              _isGoogleLoading ? 'Signing up...' : 'Sign up with Google',
+                              _isGoogleLoading
+                                  ? 'Signing up...'
+                                  : 'Sign up with Google',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey.shade700,

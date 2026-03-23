@@ -1,5 +1,5 @@
 /// Schedule Enforcer Service
-/// 
+///
 /// Bridges ScheduleService and NativeService to enforce screen time rules.
 /// Monitors active schedules and updates native blocked apps list in real-time.
 library;
@@ -13,19 +13,24 @@ import 'native_service.dart';
 import 'notification_service.dart';
 
 /// Callback for when lock state changes
-typedef LockStateCallback = void Function(bool isLocked, LockScreenInfo? info);
+typedef LockStateCallback =
+    void Function(
+      bool isLocked,
+      LockScreenInfo? info,
+      List<String> blockedApps,
+    );
 
 class ScheduleEnforcer {
   final ScheduleService _scheduleService = ScheduleService();
   final NativeService _nativeService = NativeService();
   final NotificationService _notificationService = NotificationService();
-  
+
   Timer? _checkTimer;
   RealtimeChannel? _scheduleSubscription;
   String? _currentChildId;
   Schedule? _currentActiveSchedule;
   LockStateCallback? _onLockStateChange;
-  
+
   bool _isLocked = false;
   List<String> _currentBlockedApps = [];
 
@@ -36,16 +41,16 @@ class ScheduleEnforcer {
   }) async {
     _currentChildId = childId;
     _onLockStateChange = onLockStateChange;
-    
+
     // Check immediately
     await _checkAndEnforce();
-    
+
     // Check every 30 seconds
     _checkTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _checkAndEnforce(),
     );
-    
+
     // Subscribe to real-time schedule changes
     _subscribeToScheduleChanges(childId);
   }
@@ -68,24 +73,30 @@ class ScheduleEnforcer {
     if (_currentChildId == null) return;
 
     try {
-      final activeSchedule = await _scheduleService.getActiveSchedule(_currentChildId!);
-      
+      final activeSchedule = await _scheduleService.getActiveSchedule(
+        _currentChildId!,
+      );
+
       // Check if schedule state changed
       final wasLocked = _isLocked;
       final previousScheduleId = _currentActiveSchedule?.id;
-      
+      final previousScheduleName = _currentActiveSchedule?.name;
+      final previousBlockedApps = List<String>.from(_currentBlockedApps);
+
       _currentActiveSchedule = activeSchedule;
-      
+
       if (activeSchedule != null) {
         await _enforceSchedule(activeSchedule);
       } else {
         await _clearEnforcement();
       }
-      
+
       // Notify if lock state changed
-      if (wasLocked != _isLocked || previousScheduleId != activeSchedule?.id) {
+      if (wasLocked != _isLocked ||
+          previousScheduleId != activeSchedule?.id ||
+          !listEquals(previousBlockedApps, _currentBlockedApps)) {
         _notifyLockStateChange();
-        
+
         // Show notification if schedule just started or ended
         if (activeSchedule != null && previousScheduleId != activeSchedule.id) {
           await _notificationService.showScheduleNotification(
@@ -94,7 +105,7 @@ class ScheduleEnforcer {
           );
         } else if (activeSchedule == null && previousScheduleId != null) {
           await _notificationService.showScheduleNotification(
-            scheduleName: _currentActiveSchedule?.name ?? 'Schedule',
+            scheduleName: previousScheduleName ?? 'Schedule',
             isStarting: false,
           );
         }
@@ -112,7 +123,7 @@ class ScheduleEnforcer {
         _isLocked = true;
         await _blockAllApps();
         break;
-        
+
       case ScheduleType.homework:
         if (schedule.blockAllApps) {
           // Block all apps during homework
@@ -124,7 +135,7 @@ class ScheduleEnforcer {
           await _blockCategories(schedule.blockedCategories ?? []);
         }
         break;
-        
+
       case ScheduleType.allowedHours:
         // During allowed hours, everything is allowed (no blocking)
         _isLocked = false;
@@ -138,16 +149,17 @@ class ScheduleEnforcer {
     // Get list of all installed apps from native
     try {
       final usageStats = await _nativeService.getFullUsageStats();
-      
+
       // Block all apps except essential ones
-      final appsToBlock = usageStats
-          .map((app) => app['packageName'] as String)
-          .where((pkg) => !_isEssentialApp(pkg))
-          .toList();
-      
+      final appsToBlock =
+          usageStats
+              .map((app) => app['packageName'] as String)
+              .where((pkg) => !_isEssentialApp(pkg))
+              .toList()
+            ..sort();
+
       if (!listEquals(appsToBlock, _currentBlockedApps)) {
         _currentBlockedApps = appsToBlock;
-        await _nativeService.updateBlockedApps(appsToBlock);
       }
     } catch (e) {
       debugPrint('Failed to block all apps: $e');
@@ -160,19 +172,20 @@ class ScheduleEnforcer {
       await _clearEnforcement();
       return;
     }
-    
+
     try {
       final usageStats = await _nativeService.getFullUsageStats();
-      
+
       // Block apps matching the categories
-      final appsToBlock = usageStats
-          .map((app) => app['packageName'] as String)
-          .where((pkg) => categories.contains(_detectAppCategory(pkg)))
-          .toList();
-      
+      final appsToBlock =
+          usageStats
+              .map((app) => app['packageName'] as String)
+              .where((pkg) => categories.contains(_detectAppCategory(pkg)))
+              .toList()
+            ..sort();
+
       if (!listEquals(appsToBlock, _currentBlockedApps)) {
         _currentBlockedApps = appsToBlock;
-        await _nativeService.updateBlockedApps(appsToBlock);
       }
     } catch (e) {
       debugPrint('Failed to block categories: $e');
@@ -184,11 +197,6 @@ class ScheduleEnforcer {
     _isLocked = false;
     if (_currentBlockedApps.isNotEmpty) {
       _currentBlockedApps = [];
-      try {
-        await _nativeService.updateBlockedApps([]);
-      } catch (e) {
-        debugPrint('Failed to clear blocking: $e');
-      }
     }
   }
 
@@ -211,8 +219,8 @@ class ScheduleEnforcer {
     final lower = packageName.toLowerCase();
 
     // Games
-    if (lower.contains('game') || 
-        lower.contains('roblox') || 
+    if (lower.contains('game') ||
+        lower.contains('roblox') ||
         lower.contains('minecraft') ||
         lower.contains('supercell') ||
         lower.contains('com.king') ||
@@ -249,13 +257,17 @@ class ScheduleEnforcer {
   /// Notify listener about lock state change
   void _notifyLockStateChange() {
     if (_onLockStateChange == null) return;
-    
+
     LockScreenInfo? info;
     if (_currentActiveSchedule != null) {
       info = _scheduleService.getLockScreenInfo(_currentActiveSchedule!);
     }
-    
-    _onLockStateChange!(_isLocked, info);
+
+    _onLockStateChange!(
+      _isLocked,
+      info,
+      List.unmodifiable(_currentBlockedApps),
+    );
   }
 
   /// Subscribe to real-time schedule changes
